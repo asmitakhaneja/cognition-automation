@@ -41,7 +41,7 @@ programmatic session management, which is the point of the exercise.
 3. A forked copy of `apache/superset` in your own GitHub org/account, with
    the issues you want remediated created and labeled `devin-fix`.
 4. Docker + Docker Compose installed locally.
-5. [ngrok](https://ngrok.com/) (or similar) if you want to receive live
+5. [ngrok](https://ngrok.com/)  to receive live
    webhooks from a public GitHub repo while running locally.
 
 ## Setup
@@ -104,7 +104,7 @@ docker-compose.yml
 .env.example
 ```
 
-## Notes on the 5 seeded issues
+## Notes on the seeded issues
 
 See the forked repo's issue tracker (labeled `devin-fix`) for the specific
 security, dependency, code-quality, and test-coverage issues this system
