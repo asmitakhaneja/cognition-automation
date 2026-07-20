@@ -1,0 +1,17 @@
+services:
+  orchestrator:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DEVIN_API_KEY=${DEVIN_API_KEY}
+      - DEVIN_ORG_ID=${DEVIN_ORG_ID}
+      - GITHUB_REPO=${GITHUB_REPO}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
+      - TRIGGER_LABEL=${TRIGGER_LABEL:-devin-fix}
+      - POLL_INTERVAL_SEC=${POLL_INTERVAL_SEC:-30}
+      - STORE_PATH=/data/state.json
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
