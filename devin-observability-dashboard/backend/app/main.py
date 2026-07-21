@@ -42,6 +42,7 @@ app.add_middleware(
 
 # Real-time automation state (webhook-triggered remediation sessions).
 store = Store(settings.store_path)
+
 if settings.use_mock:
     store.replace_all(demo_records())
 

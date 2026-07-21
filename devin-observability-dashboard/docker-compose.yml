@@ -6,8 +6,7 @@ services:
     # Load all configuration from .env (copy .env.example -> .env first).
     # Without a .env the app simply runs on demo data.
     env_file:
-      - path: .env
-        required: false
+      - .env
     # STORE_PATH is a container path, so it's fixed here rather than in .env.
     environment:
       - STORE_PATH=/data/state.json
