@@ -54,8 +54,8 @@ docker compose up --build
 ```
 
 The service starts on `http://localhost:8000`:
-- `GET /` — live HTML dashboard
-- `GET /status` — JSON status + summary metrics
+- `GET /` — live React dashboard (single-page app; data is loaded client-side from `/status`)
+- `GET /status` — JSON status + summary metrics (the dashboard's data source)
 - `POST /webhook/github` — GitHub webhook receiver
 - `POST /trigger/{issue_number}` — manually trigger remediation for one issue
 - `POST /trigger-all` — trigger remediation for every open issue labeled `devin-fix`
@@ -91,15 +91,44 @@ State is stored in a single JSON file (`/data/state.json`, mounted via
 swap in Postgres/SQLite for a production deployment without touching the
 rest of the app.
 
+## Frontend (React)
+
+The dashboard is a React single-page app (Vite) under `frontend/`. It fetches
+all data from the backend `/status` JSON API on load and subscribes to `/events`
+(Server-Sent Events) to refresh live — the backend no longer renders any HTML.
+
+`docker compose up --build` builds the SPA automatically (multi-stage Docker
+build) and FastAPI serves the compiled bundle at `/`.
+
+For local frontend development with hot-reload:
+
+```bash
+# terminal 1 — backend (serves /status, /events)
+uvicorn app.main:app --reload
+
+# terminal 2 — Vite dev server on :5173, proxies API calls to :8000
+cd frontend && npm install && npm run dev
+```
+
+To produce the static bundle the backend serves at `/` without Docker:
+
+```bash
+cd frontend && npm install && npm run build   # emits frontend/dist
+```
+
 ## Project structure
 
 ```
 app/
-  main.py           FastAPI app: webhook, manual triggers, dashboard, poller
-  devin_client.py   Devin v3 API wrapper (create session, poll, message, insights)
-  github_client.py  GitHub REST API helper (fetch issue details)
+  main.py           FastAPI app: webhook, manual triggers, JSON API, SSE, serves SPA
+  client/
+    devin_client.py Devin v3 API wrapper (create session, poll, message, insights)
+    github_client.py GitHub REST API helper (fetch issue details)
   store.py          JSON-file state store + summary metrics
-Dockerfile
+frontend/           React (Vite) dashboard — fetches /status, live via /events
+  src/App.jsx       Dashboard UI (summary cards + sessions table + session logs)
+  src/lib.js        API fetch + SSE + formatting helpers
+Dockerfile          Multi-stage: build React bundle, then Python runtime
 docker-compose.yml
 .env.example
 ```

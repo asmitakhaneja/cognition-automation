@@ -1,7 +1,6 @@
 import asyncio
 import hashlib
 import hmac
-import html as _html
 import json
 import logging
 import os
@@ -10,8 +9,8 @@ import time
 from urllib.parse import unquote_plus
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import store
 from .client import devin_client, github_client
@@ -25,21 +24,12 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Devin x Superset Remediation Orchestrator")
 
-_TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
-templates = Jinja2Templates(directory=_TEMPLATES_DIR)
-
-
-def _relative_time(ts: float | None) -> str:
-    if not ts:
-        return '—'
-    sec = int(time.time() - ts)
-    if sec < 60:
-        return f'{sec}s ago'
-    if sec < 3600:
-        return f'{sec // 60}m ago'
-    if sec < 86400:
-        return f'{sec // 3600}h ago'
-    return f'{sec // 86400}d ago'
+# Built React single-page app (see ../frontend). The Vite build emits an
+# index.html plus hashed asset files under dist/assets. The backend serves
+# these; all dashboard data is loaded by the SPA from the /status JSON API.
+_FRONTEND_DIST = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+)
 
 # --------------------------------------------------------------------------
 # SSE broadcast: a list of per-client asyncio queues.
@@ -318,6 +308,7 @@ def send_followup_message(issue_number: int, message: str):
 @app.get("/status")
 def status():
     return {
+        "repo": github_client.REPO_FULL_NAME,
         "summary": store.summary(),
         "records": store.all_records(),
     }
@@ -350,92 +341,21 @@ async def sse_events(request: Request):
     return StreamingResponse(stream(), media_type="text/event-stream")
 
 
-@app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request):
-    s = store.summary()
-    records = store.all_records()
-
-    def _row_pair(r: dict) -> str:
-        n = r['issue_number']
-        tools = ", ".join(
-            (r.get('tools_and_frameworks') or []) + (r.get('programming_languages') or [])
+@app.get("/")
+def dashboard():
+    """Serve the built React single-page app. All dashboard data is loaded by
+    the SPA at runtime from the /status JSON API (and /events for live updates),
+    so this route only returns the static shell."""
+    index_file = os.path.join(_FRONTEND_DIST, "index.html")
+    if not os.path.isfile(index_file):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Frontend not built. Run `npm --prefix frontend install && "
+                "npm --prefix frontend run build`, or use `docker compose up --build`."
+            ),
         )
-        tools_html = f'<br><small class="tools">{tools}</small>' if tools else ''
-        detail = r.get('status_detail') or ''
-        detail_html = f'<br><small class="detail">{detail}</small>' if detail else ''
-        acus = r.get('acus_consumed')
-        acus_html = str(round(float(acus), 1)) if acus is not None else '—'
-        clf_conf = r.get('classification_confidence')
-        conf_html = (
-            f'<br><small class="detail">conf: {round(clf_conf, 2)}</small>'
-            if clf_conf is not None else ''
-        )
-
-        msgs = r.get('messages') or []
-        if msgs:
-            def _bubble(m, idx):
-                src = m.get("source", "unknown")
-                is_user = src == "user"
-                role_cls = "bubble-user" if is_user else "bubble-devin"
-                avatar_cls = "avatar-user" if is_user else "avatar-devin"
-                avatar_label = "You" if is_user else "Dev"
-                label = "You" if is_user else "Devin"
-                raw_ts = m.get("created_at")
-                ts_html = f'<span style="margin-left:6px">{raw_ts}</span>' if raw_ts else ""
-                text = _html.escape(m.get("message", "") or m.get("content", ""))
-                return (
-                    f'<div class="bubble-row {role_cls}">'
-                    f'<div class="avatar {avatar_cls}">{avatar_label}</div>'
-                    f'<div class="bubble">'
-                    f'<div class="bubble-meta"><strong>{label}</strong>{ts_html}</div>'
-                    f'<div class="bubble-text" id="bt-{n}-{idx}">{text}</div>'
-                    f'<button class="expand-btn" onclick="toggleBubble(\'bt-{n}-{idx}\',this)">Show more</button>'
-                    f'</div></div>'
-                )
-            msg_items = "".join(_bubble(m, i) for i, m in enumerate(msgs))
-        else:
-            msg_items = '<p style="color:#475569;font-size:0.8rem;text-align:center;padding:1rem 0">No messages yet.</p>'
-
-        msg_count = len(msgs)
-        msg_badge = f'<span class="msg-badge">{msg_count}</span>' if msg_count else ''
-        pr_link = f'<a href="{r["pr_url"]}" target="_blank">PR ↗</a>' if r.get("pr_url") else "—"
-        session_link = (
-            f'<a href="{r["session_url"]}" target="_blank">{msg_badge}session ↗</a> ▶'
-            if r.get("session_url") else "—"
-        )
-        data_row = (
-            f'<tr data-issue="{n}" title="Click to toggle session log">'
-            f'<td>#{n}</td>'
-            f'<td>{r.get("title","")}</td>'
-            f'<td><span class="tag">{r.get("category","")}</span>{conf_html}{tools_html}</td>'
-            f'<td class="ts">{_relative_time(r.get("created_at"))}</td>'
-            f'<td class="status-{r.get("status","unknown")}">{r.get("status","unknown")}{detail_html}</td>'
-            f'<td>{pr_link}</td>'
-            f'<td><span class="tag pr-{r.get("pr_status","")}">{r.get("pr_status") or "—"}</span></td>'
-            f'<td class="ts">{acus_html}</td>'
-            f'<td>{session_link}</td>'
-            f'</tr>'
-        )
-        log_row = (
-            f'<tr id="log-{n}" style="display:none">'
-            f'<td colspan="9" class="log-cell">'
-            f'<div class="log-panel">'
-            f'<div class="log-header">'
-            f'<span><strong>Session log</strong> · issue #{n} · {msg_count} message{"s" if msg_count != 1 else ""}</span>'
-            f'<span class="log-close" onclick="event.stopPropagation();document.getElementById(\'log-{n}\').style.display=\'none\'">✕ close</span>'
-            f'</div>'
-            f'<div class="log-messages">{msg_items}</div>'
-            f'</div></td></tr>'
-        )
-        return data_row + log_row
-
-    rows = "".join(_row_pair(r) for r in records)
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "repo": github_client.REPO_FULL_NAME,
-        "s": s,
-        "rows": rows,
-    })
+    return FileResponse(index_file)
 
 
 @app.on_event("startup")
@@ -497,3 +417,15 @@ def resume_watchers() -> None:
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+# Serve the hashed JS/CSS bundles emitted by the Vite build. Mounted last so it
+# never shadows the API routes above. Only mounted when a build is present.
+_ASSETS_DIR = os.path.join(_FRONTEND_DIST, "assets")
+if os.path.isdir(_ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=_ASSETS_DIR), name="assets")
+else:
+    logger.warning(
+        "Frontend build not found at %s — the dashboard at / will return 503 "
+        "until the React app is built.", _FRONTEND_DIST,
+    )

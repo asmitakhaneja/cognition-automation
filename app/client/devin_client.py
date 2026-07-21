@@ -196,16 +196,25 @@ def extract_status_and_pr(session_data: dict) -> tuple[str, str | None, str | No
 
 
 def get_session_insights(session_id: str) -> dict | None:
-    """Fetch per-session insights, triggering generation if none exist yet."""
+    """Fetch per-session insights, triggering generation if none exist yet.
+
+    The GET insights endpoint returns the metrics we care about (acus_consumed,
+    session_size, message counts) immediately; only the AI-generated ``analysis``
+    block is produced asynchronously. When no insights exist yet the endpoint
+    404s, so we POST to ``/generate`` to kick off generation and then re-GET the
+    insights — the ``/generate`` response is only a generation-kickoff
+    acknowledgement and does NOT contain the metrics, so it must not be returned
+    as the insights payload.
+    """
     url = f"{BASE_URL}/sessions/{session_id}/insights"
     try:
         resp = requests.get(url, headers=HEADERS, timeout=30)
         if resp.status_code == 404 or not resp.text.strip():
             logger.info("No insights for session %s — generating", session_id)
-            resp = requests.post(f"{url}/generate", headers=HEADERS, timeout=30)
-            resp.raise_for_status()
-        else:
-            resp.raise_for_status()
+            gen = requests.post(f"{url}/generate", headers=HEADERS, timeout=30)
+            gen.raise_for_status()
+            resp = requests.get(url, headers=HEADERS, timeout=30)
+        resp.raise_for_status()
         data = resp.json()
         return data if data else None
     except Exception:
