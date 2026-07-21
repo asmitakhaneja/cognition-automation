@@ -1,29 +1,33 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchStatus, subscribeEvents, relativeTime, formatAcus } from './lib.js'
 import Charts from './Charts.jsx'
+import { Icon } from './icons.jsx'
 
 const CARD_FIELDS = [
-  { key: 'total_triggered', label: 'Issues Picked Up', hint: 'Total issues Devin was triggered on' },
-  { key: 'in_progress', label: 'Currently Working', hint: 'Sessions still running' },
-  { key: 'finished', label: 'Completed', hint: 'Sessions that reached a terminal state' },
-  { key: 'prs_opened', label: 'Fixes Proposed', hint: 'Pull requests opened' },
-  { key: 'prs_merged', label: 'Fixes Shipped', hint: 'Pull requests merged to the codebase' },
-  { key: 'blocked_or_failed', label: 'Needs Attention', hint: 'Blocked, expired or stopped sessions' },
-  { key: 'success_rate_pct', label: 'Fix Success Rate', hint: '% of issues that produced a PR', suffix: '%' },
-  { key: 'total_acus', label: 'Total Compute (ACUs)', hint: 'Total Agent Compute Units consumed' },
-  { key: 'avg_acus_per_fix', label: 'Compute per Fix', hint: 'Average ACUs per delivered PR' },
+  { key: 'total_triggered', label: 'Issues Picked Up', hint: 'Total issues Devin was triggered on', icon: 'inbox', accent: 'blue' },
+  { key: 'in_progress', label: 'Currently Working', hint: 'Sessions still running', icon: 'activity', accent: 'amber' },
+  { key: 'finished', label: 'Completed', hint: 'Sessions that reached a terminal state', icon: 'check', accent: 'green' },
+  { key: 'prs_opened', label: 'Fixes Proposed', hint: 'Pull requests opened', icon: 'pr', accent: 'blue' },
+  { key: 'prs_merged', label: 'Fixes Shipped', hint: 'Pull requests merged to the codebase', icon: 'merge', accent: 'violet' },
+  { key: 'blocked_or_failed', label: 'Needs Attention', hint: 'Blocked, expired or stopped sessions', icon: 'alert', accent: 'red' },
+  { key: 'success_rate_pct', label: 'Fix Success Rate', hint: '% of issues that produced a PR', suffix: '%', icon: 'target', accent: 'green' },
+  { key: 'total_acus', label: 'Total Compute (ACUs)', hint: 'Total Agent Compute Units consumed', icon: 'cpu', accent: 'violet' },
+  { key: 'avg_acus_per_fix', label: 'Compute per Fix', hint: 'Average ACUs per delivered PR', icon: 'gauge', accent: 'blue' },
 ]
 
 function SummaryCards({ summary }) {
   return (
     <div className="cards">
-      {CARD_FIELDS.map(({ key, label, suffix, hint }) => {
+      {CARD_FIELDS.map(({ key, label, suffix, hint, icon, accent }) => {
         const val = summary?.[key]
         const has = val !== null && val !== undefined
         return (
-          <div className="card" key={key} title={hint}>
-            <div className="num">{has ? `${val}${suffix && has ? suffix : ''}` : '—'}</div>
-            <div className="label">{label}</div>
+          <div className={`card accent-${accent}`} key={key} title={hint}>
+            <div className="card-icon"><Icon name={icon} /></div>
+            <div className="card-body">
+              <div className="num">{has ? `${val}${suffix && has ? suffix : ''}` : '—'}</div>
+              <div className="label">{label}</div>
+            </div>
           </div>
         )
       })}
@@ -150,37 +154,59 @@ export default function App() {
   const summary = data?.summary
   const records = data?.records || []
 
+  const repo = summary?.repo || data?.repo || '…'
+
   return (
-    <>
-      <h1>Devin Remediation Dashboard</h1>
-      <p className="subtitle">
-        Repo: {summary?.repo || data?.repo || '…'} · Updates in real-time
-        <span className={`conn ${live ? 'conn-live' : 'conn-off'}`}>{live ? '● live' : '○ offline'}</span>
-      </p>
+    <div className="app">
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-mark">D</div>
+          <div>
+            <h1>Remediation Dashboard</h1>
+            <p className="subtitle">Autonomous issue remediation for <span className="repo">{repo}</span></p>
+          </div>
+        </div>
+        <span className={`conn ${live ? 'conn-live' : 'conn-off'}`}>
+          <span className="conn-dot" />{live ? 'Live' : 'Offline'}
+        </span>
+      </header>
 
-      {error && <p style={{ color: '#f87171' }}>Failed to load: {error}</p>}
+      {error && <p className="error-banner">Failed to load: {error}</p>}
 
-      <SummaryCards summary={summary} />
+      <section className="panel">
+        <h2 className="section-title">Overview</h2>
+        <SummaryCards summary={summary} />
+      </section>
 
-      {records.length > 0 && <Charts records={records} summary={summary} />}
+      {records.length > 0 && (
+        <section className="panel">
+          <h2 className="section-title">Analytics</h2>
+          <Charts records={records} summary={summary} />
+        </section>
+      )}
 
-      <table>
-        <thead>
-          <tr>
-            <th>Issue</th><th>Title</th><th>Category</th><th>Started</th>
-            <th>Status</th><th>PR</th><th>PR Status</th><th>ACUs</th><th>Devin Session</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data === null ? (
-            <tr><td colSpan={9} className="loading">Loading…</td></tr>
-          ) : records.length ? (
-            records.map((r) => <SessionRow key={r.issue_number} r={r} />)
-          ) : (
-            <tr><td colSpan={9} className="empty">No issues triggered yet.</td></tr>
-          )}
-        </tbody>
-      </table>
-    </>
+      <section className="panel">
+        <h2 className="section-title">Sessions{records.length ? <span className="count-pill">{records.length}</span> : null}</h2>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Issue</th><th>Title</th><th>Category</th><th>Started</th>
+                <th>Status</th><th>PR</th><th>PR Status</th><th>ACUs</th><th>Devin Session</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data === null ? (
+                <tr><td colSpan={9} className="loading">Loading…</td></tr>
+              ) : records.length ? (
+                records.map((r) => <SessionRow key={r.issue_number} r={r} />)
+              ) : (
+                <tr><td colSpan={9} className="empty">No issues triggered yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   )
 }
