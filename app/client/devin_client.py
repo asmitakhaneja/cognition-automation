@@ -195,31 +195,101 @@ def extract_status_and_pr(session_data: dict) -> tuple[str, str | None, str | No
     return status, pr_url, pr_status
 
 
-def get_session_insights(session_id: str) -> dict | None:
-    """Fetch per-session insights, triggering generation if none exist yet.
+def _get_single_session_insights(session_id: str) -> dict | None:
+    """GET the per-session insights, kicking off generation if none exist yet.
 
-    The GET insights endpoint returns the metrics we care about (acus_consumed,
-    session_size, message counts) immediately; only the AI-generated ``analysis``
-    block is produced asynchronously. When no insights exist yet the endpoint
-    404s, so we POST to ``/generate`` to kick off generation and then re-GET the
-    insights — the ``/generate`` response is only a generation-kickoff
-    acknowledgement and does NOT contain the metrics, so it must not be returned
-    as the insights payload.
+    Best-effort: returns the insights object if available, otherwise ``None``.
+    The AI-generated ``analysis`` block is produced asynchronously, and for a
+    session that is still running the endpoint commonly 404s (nothing generated
+    yet) or returns an object whose ``acus_consumed`` is still ``null``. The
+    ``/generate`` response is only a kickoff acknowledgement (no metrics), so we
+    always re-GET rather than returning it. Generation failures are non-fatal —
+    we never let them wipe out metrics that another source can provide.
     """
     url = f"{BASE_URL}/sessions/{session_id}/insights"
     try:
         resp = requests.get(url, headers=HEADERS, timeout=30)
         if resp.status_code == 404 or not resp.text.strip():
             logger.info("No insights for session %s — generating", session_id)
-            gen = requests.post(f"{url}/generate", headers=HEADERS, timeout=30)
-            gen.raise_for_status()
+            try:
+                requests.post(f"{url}/generate", headers=HEADERS, timeout=30)
+            except Exception:
+                logger.debug("Insights generation kickoff failed for %s", session_id, exc_info=True)
             resp = requests.get(url, headers=HEADERS, timeout=30)
+        if resp.status_code == 404 or not resp.text.strip():
+            return None
         resp.raise_for_status()
         data = resp.json()
-        return data if data else None
+        logger.debug("Per-session insights for %s: %s", session_id, data)
+        return data or None
     except Exception:
-        logger.warning("Could not fetch insights for session %s", session_id, exc_info=True)
+        logger.warning("Could not fetch per-session insights for %s", session_id, exc_info=True)
         return None
+
+
+def _get_live_session_insight(session_id: str) -> dict | None:
+    """Find this session in the bulk ``/sessions-insights`` feed.
+
+    Unlike the per-session endpoint, the bulk feed reports ``acus_consumed`` for
+    in-flight (running) sessions, so it is the reliable source of *live* compute
+    usage before a session finishes.
+    """
+    try:
+        payload = list_sessions_insights()
+    except Exception:
+        logger.warning("Could not fetch bulk sessions-insights", exc_info=True)
+        return None
+
+    if isinstance(payload, list):
+        items = payload
+    elif isinstance(payload, dict):
+        items = (
+            payload.get("insights")
+            or payload.get("sessions")
+            or payload.get("items")
+            or payload.get("data")
+            or []
+        )
+    else:
+        items = []
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        session = item.get("session") if isinstance(item.get("session"), dict) else {}
+        sid = item.get("session_id") or item.get("id") or session.get("session_id")
+        if sid == session_id:
+            return item
+    return None
+
+
+def get_session_insights(session_id: str) -> dict | None:
+    """Return per-session insights, ensuring ``acus_consumed`` is populated for
+    running sessions too.
+
+    Compute usage (``acus_consumed``) accrues while a session is still running,
+    but the per-session ``/insights`` endpoint only exposes it once insights have
+    been generated (typically at/after completion). Relying on it alone leaves
+    ACUs empty for live sessions — including ones that have already opened a PR
+    but are not yet ``finished``. To fix that we merge in the bulk
+    ``/sessions-insights`` feed, which reports ACUs for in-flight sessions,
+    whenever the per-session payload is missing the metric.
+    """
+    per_session = _get_single_session_insights(session_id)
+    if per_session and per_session.get("acus_consumed") is not None:
+        return per_session
+
+    live = _get_live_session_insight(session_id)
+    if live is None:
+        return per_session
+    if per_session is None:
+        return live
+
+    merged = dict(per_session)
+    for key in ("acus_consumed", "session_size"):
+        if merged.get(key) is None and live.get(key) is not None:
+            merged[key] = live[key]
+    return merged
 
 
 def get_session_messages(session_id: str) -> list[dict]:
