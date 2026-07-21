@@ -94,12 +94,21 @@ def summary() -> dict:
         if r.get("created_at") and r.get("updated_at")
     ]
     avg_time_to_finish_sec = sum(durations) / len(durations) if durations else None
+    all_acus = [r["acus_consumed"] for r in records if r.get("acus_consumed") is not None]
+    total_acus = round(sum(all_acus), 2) if all_acus else None
+    prs_merged = [r for r in records if r.get("pr_status") == "merged"]
+    avg_acus_per_fix = (
+        round(total_acus / len(with_pr), 2) if (total_acus is not None and with_pr) else None
+    )
     return {
         "total_triggered": total,
         "finished": len(finished),
         "prs_opened": len(with_pr),
+        "prs_merged": len(prs_merged),
         "blocked_or_failed": len(blocked),
         "in_progress": total - len(finished) - len(blocked),
         "success_rate_pct": round(100 * len(with_pr) / total, 1) if total else None,
         "avg_time_to_finish_sec": round(avg_time_to_finish_sec, 1) if avg_time_to_finish_sec else None,
+        "total_acus": total_acus,
+        "avg_acus_per_fix": avg_acus_per_fix,
     }

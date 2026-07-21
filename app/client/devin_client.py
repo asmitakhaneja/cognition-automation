@@ -129,8 +129,9 @@ def get_session(session_id: str) -> dict:
             session_id, resp.status_code, resp.text,
         )
         raise
-    logger.debug("Fetched session %s (HTTP %d)", session_id, resp.status_code)
-    return resp.json()
+    data = resp.json()
+    logger.debug("Fetched session %s (HTTP %d): %s", session_id, resp.status_code, data)
+    return data
 
 
 def send_message(session_id: str, message: str) -> dict:
@@ -177,15 +178,67 @@ def list_sessions_insights(limit: int = 50) -> dict:
     return resp.json()
 
 
-def extract_status_and_pr(session_data: dict) -> tuple[str, str | None]:
-    """Normalize whatever the session payload gives us into (status, pr_url)."""
+def extract_status_and_pr(session_data: dict) -> tuple[str, str | None, str | None]:
+    """Normalize whatever the session payload gives us into (status, pr_url, pr_status)."""
+
     status = session_data.get("status") or session_data.get("status_enum") or "unknown"
     pr_url = None
-    pr = session_data.get("pull_request") or session_data.get("pr")
+    pr_status = None
+    pr_list = session_data.get("pull_requests") or session_data.get("pr")
+    pr = pr_list[0] if isinstance(pr_list, list) and pr_list else pr_list
     if isinstance(pr, dict):
-        pr_url = pr.get("url") or pr.get("html_url")
-    # Some responses may list PRs under structured_output / metadata; fall back gracefully.
+        pr_url = pr.get("pr_url")
+        pr_status = pr.get("pr_state")
     if not pr_url:
         structured = session_data.get("structured_output") or {}
         pr_url = structured.get("pr_url")
-    return status, pr_url
+    return status, pr_url, pr_status
+
+
+def get_session_insights(session_id: str) -> dict | None:
+    """Fetch per-session insights, triggering generation if none exist yet."""
+    url = f"{BASE_URL}/sessions/{session_id}/insights"
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=30)
+        if resp.status_code == 404 or not resp.text.strip():
+            logger.info("No insights for session %s — generating", session_id)
+            resp = requests.post(f"{url}/generate", headers=HEADERS, timeout=30)
+            resp.raise_for_status()
+        else:
+            resp.raise_for_status()
+        data = resp.json()
+        return data if data else None
+    except Exception:
+        logger.warning("Could not fetch insights for session %s", session_id, exc_info=True)
+        return None
+
+
+def get_session_messages(session_id: str) -> list[dict]:
+    """Fetch the full message thread for a session."""
+    try:
+        resp = requests.get(
+            f"{BASE_URL}/sessions/{session_id}/messages",
+            headers=HEADERS,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if isinstance(data, list):
+            return data
+        return data.get("messages", [])
+    except Exception:
+        logger.warning("Could not fetch messages for session %s", session_id, exc_info=True)
+        return []
+
+
+def extract_insights_fields(insights: dict) -> dict:
+    """Normalise a Devin insights payload into flat store fields."""
+    clf = insights.get("classification") or {}
+    return {
+        "acus_consumed": insights.get("acus_consumed"),
+        "session_size": insights.get("session_size"),
+        "classification_category": clf.get("category"),
+        "classification_confidence": clf.get("confidence"),
+        "tools_and_frameworks": clf.get("tools_and_frameworks", []),
+        "programming_languages": clf.get("programming_languages", []),
+    }
