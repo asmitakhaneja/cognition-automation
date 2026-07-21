@@ -37,14 +37,16 @@ class Settings:
 
     @property
     def use_mock(self) -> bool:
-        """Use the built-in demo dataset when no credential is configured.
+        """Use the built-in demo dataset when live access isn't configured.
 
-        Setting ``DEVIN_DASHBOARD_FORCE_MOCK=1`` forces demo mode even when a
-        key is present (handy for local UI work).
+        The organization API needs both a credential and an org id, so demo
+        mode is used unless both are present. Setting
+        ``DEVIN_DASHBOARD_FORCE_MOCK=1`` forces demo mode even when they are
+        (handy for local UI work).
         """
         if os.environ.get("DEVIN_DASHBOARD_FORCE_MOCK", "").strip() in _TRUE_VALUES:
             return True
-        return not bool(self.api_key)
+        return not (self.api_key and self.org_id)
 
     @property
     def automation_enabled(self) -> bool:

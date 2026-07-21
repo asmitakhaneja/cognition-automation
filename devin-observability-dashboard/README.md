@@ -71,11 +71,14 @@ GitHub issue labeled `devin-fix`
 
 ### Devin API endpoints used
 
+All reads are scoped to a single organization (`DEVIN_ORG_ID`) via the
+`/v3/organizations/{org_id}/*` endpoints.
+
 | Purpose | Endpoint |
 | --- | --- |
-| Sessions (progress, activity, PRs, categories, origins) | `GET /v3/enterprise/sessions` |
-| Cost by product over time | `GET /v3/enterprise/consumption/daily` |
-| Session log drill-down | `GET /v3/enterprise/sessions/{devin_id}/messages` |
+| Sessions (progress, activity, PRs, categories, origins) | `GET /v3/organizations/{org_id}/sessions` |
+| Cost by product over time | `GET /v3/organizations/{org_id}/consumption/daily` |
+| Session log drill-down | `GET /v3/organizations/{org_id}/sessions/{devin_id}/messages` |
 | User display names | `GET /v3beta1/organizations/{org_id}/members/users` |
 | Create remediation session (webhook) | `POST /v3/organizations/{org_id}/sessions` |
 
@@ -96,8 +99,9 @@ GitHub issue labeled `devin-fix`
 docker compose up --build      # http://localhost:8000
 ```
 
-Runs on demo data out of the box. Set credentials in a `.env` file (see below)
-to enable live data + webhook automation.
+Runs on demo data out of the box. `docker compose` loads configuration from a
+`.env` file (copy `.env.example` -> `.env`); set `DEVIN_API_KEY` + `DEVIN_ORG_ID`
+there to enable live data + webhook automation.
 
 ## Quick start (local)
 
@@ -118,15 +122,15 @@ Open http://localhost:8000. With no credential set you'll see **demo data**.
 
 ```bash
 cp .env.example .env
-# edit .env and set DEVIN_API_KEY=cog_...  (or apk_user_...)
+# edit .env and set DEVIN_API_KEY and DEVIN_ORG_ID (org-...)
 cd backend && . .venv/bin/activate && set -a && source ../.env && set +a \
   && uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-The credential can be either:
-- a **v3 service-user token** (`cog_...`) with the `ViewAccountConsumption`
-  permission at the enterprise level, or
-- an **enterprise-admin personal API key** (`apk_user_...`).
+Live data requires **both** `DEVIN_API_KEY` and `DEVIN_ORG_ID` (the org API is
+organization-scoped). The credential can be either:
+- a **v3 service-user token** (`cog_...`) with access to the organization, or
+- a **personal API key** (`apk_user_...`).
 
 Generate keys at [Settings → API Keys](https://app.devin.ai/settings/api-keys).
 

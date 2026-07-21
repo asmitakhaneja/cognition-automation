@@ -150,8 +150,8 @@ export function App() {
 
           <footer className="foot">
             {data.is_demo
-              ? "Showing built-in demo data. Set DEVIN_API_KEY on the backend to load live enterprise data."
-              : "Live data from the Devin enterprise API."}{" "}
+              ? "Showing built-in demo data. Set DEVIN_API_KEY + DEVIN_ORG_ID on the backend to load live data."
+              : "Live data from the Devin organization API."}{" "}
             · Last {data.range_days} days
           </footer>
         </main>
