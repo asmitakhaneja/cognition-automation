@@ -39,6 +39,47 @@ function BarChart({ data, colorFor, unit }) {
   )
 }
 
+// SVG pie chart with a legend. `data` = [{label, value}].
+function PieChart({ data, colorFor }) {
+  const total = data.reduce((s, d) => s + d.value, 0)
+  if (!total) return <p className="chart-empty">No data yet.</p>
+  const cx = 60, cy = 60, r = 54
+  let angle = -Math.PI / 2 // start at 12 o'clock
+  const arc = (value) => {
+    const slice = (value / total) * Math.PI * 2
+    const x1 = cx + r * Math.cos(angle)
+    const y1 = cy + r * Math.sin(angle)
+    angle += slice
+    const x2 = cx + r * Math.cos(angle)
+    const y2 = cy + r * Math.sin(angle)
+    const large = slice > Math.PI ? 1 : 0
+    // full circle can't be drawn with a single arc — draw two half circles
+    if (value === total) {
+      return `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.01} ${cy - r} Z`
+    }
+    return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`
+  }
+  return (
+    <div className="pie-wrap">
+      <svg className="pie" viewBox="0 0 120 120" width="120" height="120" role="img">
+        {data.map((d) => (
+          <path key={d.label} d={arc(d.value)} fill={colorFor ? colorFor(d.label) : '#60a5fa'}
+            stroke="#1e293b" strokeWidth="1.5" />
+        ))}
+      </svg>
+      <ul className="pie-legend">
+        {data.map((d) => (
+          <li key={d.label}>
+            <span className="pie-dot" style={{ background: colorFor ? colorFor(d.label) : '#60a5fa' }} />
+            <span className="pie-name">{d.label}</span>
+            <span className="pie-count">{d.value} ({Math.round((d.value / total) * 100)}%)</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 // SVG funnel: stacked centered bars that narrow toward the outcome.
 function Funnel({ data }) {
   const max = Math.max(...data.map((d) => d.value), 1)
@@ -83,10 +124,10 @@ export default function Charts({ records, summary }) {
         <Funnel data={funnel} />
       </ChartCard>
       <ChartCard title="Sessions by status" subtitle="Where work stands right now">
-        <BarChart data={byStatus} colorFor={(l) => STATUS_COLORS[l] || '#64748b'} />
+        <PieChart data={byStatus} colorFor={(l) => STATUS_COLORS[l] || '#64748b'} />
       </ChartCard>
       <ChartCard title="Issues by category" subtitle="What kind of work Devin handles">
-        <BarChart data={byCategory} colorFor={(l) => CATEGORY_COLORS[l] || '#60a5fa'} />
+        <PieChart data={byCategory} colorFor={(l) => CATEGORY_COLORS[l] || '#60a5fa'} />
       </ChartCard>
       <ChartCard title="Compute per issue" subtitle="ACUs consumed per session">
         <BarChart data={acusByIssue} unit=" ACU" />

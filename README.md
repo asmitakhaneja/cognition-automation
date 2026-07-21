@@ -78,6 +78,86 @@ If you'd rather not stand up a tunnel for the demo, use `POST /trigger-all`
 or `POST /trigger/{issue_number}` to kick off the same flow manually — the
 underlying Devin API integration is identical either way.
 
+## Running / simulating the workflow
+
+There are three ways to exercise the system, from "fully live" to "no external
+services at all". Pick whichever fits your demo.
+
+### A. Full live workflow (real GitHub + real Devin)
+
+1. Fill in `.env` (Devin + GitHub creds) and start it: `docker compose up --build`.
+2. Register the GitHub webhook (see the section above) **or** skip the tunnel and
+   trigger manually:
+   ```bash
+   # trigger every open issue labeled devin-fix
+   curl -X POST http://localhost:8000/trigger-all
+
+   # or trigger a single issue by number
+   curl -X POST http://localhost:8000/trigger/123
+   ```
+3. Watch the dashboard at `http://localhost:8000/` — a row appears per issue and
+   updates live (via SSE) as the orchestrator polls each Devin session to
+   completion and the PR is opened/merged.
+
+### B. Simulate the webhook without a tunnel (real Devin, no ngrok)
+
+Post a GitHub-style `issues` event straight to the receiver to mimic a labeled
+issue, which kicks off a real Devin session:
+
+```bash
+curl -X POST http://localhost:8000/webhook/github \
+  -H "X-GitHub-Event: issues" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"labeled","label":{"name":"devin-fix"},
+       "issue":{"number":123,"title":"Fix XSS in filter input"}}'
+```
+
+(If `GITHUB_WEBHOOK_SECRET` is set, add the matching `X-Hub-Signature-256`
+header, or leave the secret unset for local demos.)
+
+### C. Simulate with no external services (seeded data — good for UI demos)
+
+The dashboard reads its data from the JSON state file, so you can preview the
+whole UI (cards, charts, table, session logs) without any Devin or GitHub
+access. Seed a state file and point the app at it:
+
+```bash
+mkdir -p data
+cat > data/state.json <<'JSON'
+{
+  "records": {
+    "101": {
+      "issue_number": 101, "title": "XSS in dashboard filter input",
+      "category": "security", "classification_confidence": 0.92,
+      "programming_languages": ["FastAPI", "Python"],
+      "status": "finished", "pr_url": "https://github.com/you/superset/pull/12",
+      "pr_status": "merged", "acus_consumed": 7.4,
+      "session_url": "https://app.devin.ai/sessions/abc", "created_at": 1753100000,
+      "messages": [
+        {"source": "user",  "message": "Fix the XSS issue", "created_at": "2026-07-21T10:00:00Z"},
+        {"source": "devin", "message": "Investigating the filter input handling and adding escaping.", "created_at": "2026-07-21T10:02:00Z"}
+      ]
+    },
+    "102": {
+      "issue_number": 102, "title": "Bump vulnerable dependency lodash",
+      "category": "dependency", "classification_confidence": 0.81,
+      "programming_languages": ["JavaScript"],
+      "status": "running", "acus_consumed": 2.1,
+      "session_url": "https://app.devin.ai/sessions/def", "created_at": 1753100500
+    }
+  }
+}
+JSON
+
+# dummy creds are fine — no live API calls happen when you only view seeded state
+DEVIN_API_KEY=dummy DEVIN_ORG_ID=org-x GITHUB_REPO=you/superset \
+  STORE_PATH=$PWD/data/state.json \
+  uvicorn app.main:app --port 8000
+```
+
+Then build the frontend once (`cd frontend && npm install && npm run build`) and
+open `http://localhost:8000/` to see the populated dashboard.
+
 ## Observability
 
 The dashboard (`/`) and `/status` endpoint answer "is this working?" with:
