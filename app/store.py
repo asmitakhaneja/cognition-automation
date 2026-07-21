@@ -5,11 +5,14 @@ lightweight metrics)". A real deployment would swap this for Postgres/SQLite
 without touching the rest of the app.
 """
 import json
+import logging
 import os
 import threading
 import time
 
 from .settings import STORE_PATH
+
+logger = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
 _PATH = STORE_PATH
@@ -17,28 +20,50 @@ _PATH = STORE_PATH
 
 def _load() -> dict:
     if not os.path.exists(_PATH):
+        logger.debug("Store file not found at %s, starting fresh", _PATH)
         return {"records": {}}
-    with open(_PATH, "r") as f:
-        return json.load(f)
+    try:
+        with open(_PATH, "r") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.error("Failed to load store from %s", _PATH, exc_info=True)
+        raise
 
 
 def _save(data: dict) -> None:
     os.makedirs(os.path.dirname(_PATH), exist_ok=True)
     tmp = _PATH + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(data, f, indent=2)
-    os.replace(tmp, _PATH)
+    try:
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, _PATH)
+        logger.debug("Store saved to %s", _PATH)
+    except OSError:
+        logger.error("Failed to save store to %s", _PATH, exc_info=True)
+        raise
 
 
 def upsert_record(issue_number: int, **fields) -> dict:
+    
     with _LOCK:
         data = _load()
         key = str(issue_number)
-        record = data["records"].get(key, {"issue_number": issue_number})
+        existing = data["records"].get(key)
+        record = existing or {"issue_number": issue_number}
         record.update(fields)
         record["updated_at"] = time.time()
         data["records"][key] = record
         _save(data)
+        if existing:
+            logger.info(
+                "Updated record for issue #%d (status=%s)",
+                issue_number, record.get("status"),
+            )
+        else:
+            logger.info(
+                "Created record for issue #%d (status=%s)",
+                issue_number, record.get("status"),
+            )
         return record
 
 

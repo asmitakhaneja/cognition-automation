@@ -5,6 +5,8 @@ Docs: https://docs.devin.ai/api-reference/overview
 Base URL: https://api.devin.ai/v3/organizations/{org_id}/...
 Auth: Bearer <service user API key, "cog_..." prefix>
 """
+import logging
+
 import requests
 
 from ..settings import (
@@ -16,6 +18,8 @@ from ..settings import (
     KNOWLEDGE_IDS,
     RESUMABLE,
 )
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = f"https://api.devin.ai/v3/organizations/{DEVIN_ORG_ID}"
 
@@ -36,14 +40,18 @@ def categorize(issue_title: str, issue_labels: list[str]) -> str:
     title = issue_title.lower()
 
     if "security" in labels or any(k in title for k in ["cve", "vuln", "xss", "auth", "injection"]):
-        return "security"
-    if "dependencies" in labels or any(
+        category = "security"
+    elif "dependencies" in labels or any(
         k in title for k in ["upgrade", "bump", "dependency", "outdated"]
     ):
-        return "dependency"
-    if "tests" in labels or "test" in title or "coverage" in title:
-        return "tests"
-    return "quality"
+        category = "dependency"
+    elif "tests" in labels or "test" in title or "coverage" in title:
+        category = "tests"
+    else:
+        category = "quality"
+
+    logger.debug("Issue '%s' categorised as '%s'", issue_title, category)
+    return category
 
 
 def build_prompt(repo_full_name: str, issue_number: int, issue_title: str, issue_body: str) -> str:
@@ -71,6 +79,10 @@ Instructions:
 def create_session(repo_full_name: str, issue_number: int, issue_title: str,
                     issue_body: str, category: str) -> dict:
     """Create a new Devin session to remediate a GitHub issue."""
+    logger.info(
+        "Creating Devin session for issue #%d '%s' (category=%s)",
+        issue_number, issue_title, category,
+    )
     payload = {
         "prompt": build_prompt(repo_full_name, issue_number, issue_title, issue_body),
         "title": f"Fix #{issue_number}: {issue_title}"[:120],
@@ -90,39 +102,78 @@ def create_session(repo_full_name: str, issue_number: int, issue_title: str,
     if RESUMABLE is not None:
         payload["resumable"] = RESUMABLE
 
-    resp = requests.post(f"{BASE_URL}/sessions", headers=HEADERS, json=payload, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp = requests.post(f"{BASE_URL}/sessions", headers=HEADERS, json=payload, timeout=30)
+        resp.raise_for_status()
+    except requests.HTTPError:
+        logger.error(
+            "Devin create_session failed (HTTP %d): %s",
+            resp.status_code, resp.text,
+        )
+        raise
+
+    data = resp.json()
+    session_id = data.get("session_id") or data.get("id")
+    logger.info("Devin session created: session_id=%s", session_id)
+    return data
 
 
 def get_session(session_id: str) -> dict:
-    resp = requests.get(f"{BASE_URL}/sessions/{session_id}", headers=HEADERS, timeout=30)
-    resp.raise_for_status()
+    logger.debug("Fetching Devin session %s", session_id)
+    try:
+        resp = requests.get(f"{BASE_URL}/sessions/{session_id}", headers=HEADERS, timeout=30)
+        resp.raise_for_status()
+    except requests.HTTPError:
+        logger.error(
+            "Devin get_session failed for %s (HTTP %d): %s",
+            session_id, resp.status_code, resp.text,
+        )
+        raise
+    logger.debug("Fetched session %s (HTTP %d)", session_id, resp.status_code)
     return resp.json()
 
 
 def send_message(session_id: str, message: str) -> dict:
     """Send a follow-up instruction to a running/suspended session.
     Demonstrates programmatic *management* of a session, not just fire-and-forget."""
-    resp = requests.post(
-        f"{BASE_URL}/sessions/{session_id}/messages",
-        headers=HEADERS,
-        json={"message": message},
-        timeout=30,
+    logger.info(
+        "Sending message to session %s: %.80s%s",
+        session_id, message, "..." if len(message) > 80 else "",
     )
-    resp.raise_for_status()
+    try:
+        resp = requests.post(
+            f"{BASE_URL}/sessions/{session_id}/messages",
+            headers=HEADERS,
+            json={"message": message},
+            timeout=30,
+        )
+        resp.raise_for_status()
+    except requests.HTTPError:
+        logger.error(
+            "Devin send_message failed for session %s (HTTP %d): %s",
+            session_id, resp.status_code, resp.text,
+        )
+        raise
     return resp.json()
 
 
 def list_sessions_insights(limit: int = 50) -> dict:
     """Pull Devin's own AI-generated session insights for the dashboard/report."""
-    resp = requests.get(
-        f"{BASE_URL}/sessions-insights",
-        headers=HEADERS,
-        params={"limit": limit},
-        timeout=30,
-    )
-    resp.raise_for_status()
+    logger.debug("Fetching sessions insights (limit=%d)", limit)
+    try:
+        resp = requests.get(
+            f"{BASE_URL}/sessions-insights",
+            headers=HEADERS,
+            params={"limit": limit},
+            timeout=30,
+        )
+        resp.raise_for_status()
+    except requests.HTTPError:
+        logger.error(
+            "Devin list_sessions_insights failed (HTTP %d): %s",
+            resp.status_code, resp.text,
+        )
+        raise
     return resp.json()
 
 

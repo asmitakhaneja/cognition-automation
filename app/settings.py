@@ -15,7 +15,8 @@ GITHUB_WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET", "")
 # --- Optional app behaviour ---
 TRIGGER_LABEL = os.environ.get("TRIGGER_LABEL", "devin-fix")
 POLL_INTERVAL_SEC = int(os.environ.get("POLL_INTERVAL_SEC", "30"))
-STORE_PATH = os.environ.get("STORE_PATH", "/data/state.json")
+_default_store = os.path.join(os.path.dirname(__file__), "..", "data", "state.json")
+STORE_PATH = os.environ.get("STORE_PATH", os.path.normpath(_default_store))
 
 # --- Optional Devin session settings ---
 BYPASS_APPROVAL: bool | None = os.environ.get("BYPASS_APPROVAL")
