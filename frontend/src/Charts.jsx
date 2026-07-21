@@ -17,28 +17,6 @@ const CATEGORY_COLORS = {
   quality: '#4ade80',
 }
 
-// Horizontal labeled bar chart. `data` = [{label, value}].
-function BarChart({ data, colorFor, unit }) {
-  if (!data.length) return <p className="chart-empty">No data yet.</p>
-  const max = Math.max(...data.map((d) => d.value), 1)
-  return (
-    <div className="bars">
-      {data.map((d) => (
-        <div className="bar-row" key={d.label}>
-          <span className="bar-label">{d.label}</span>
-          <div className="bar-track">
-            <div
-              className="bar-fill"
-              style={{ width: `${(d.value / max) * 100}%`, background: colorFor ? colorFor(d.label) : '#60a5fa' }}
-            />
-          </div>
-          <span className="bar-value">{d.value}{unit || ''}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 // SVG pie chart with a legend. `data` = [{label, value}].
 function PieChart({ data, colorFor }) {
   const total = data.reduce((s, d) => s + d.value, 0)
@@ -117,7 +95,7 @@ function ChartCard({ title, subtitle, children }) {
 }
 
 export default function Charts({ records, summary }) {
-  const { funnel, byStatus, byCategory, acusByIssue } = buildCharts(records, summary)
+  const { funnel, byStatus, byCategory } = buildCharts(records, summary)
   return (
     <div className="charts">
       <ChartCard title="Remediation funnel" subtitle="Issue → PR → merged">
@@ -128,9 +106,6 @@ export default function Charts({ records, summary }) {
       </ChartCard>
       <ChartCard title="Issues by category" subtitle="What kind of work Devin handles">
         <PieChart data={byCategory} colorFor={(l) => CATEGORY_COLORS[l] || '#60a5fa'} />
-      </ChartCard>
-      <ChartCard title="Compute per issue" subtitle="ACUs consumed per session">
-        <BarChart data={acusByIssue} unit=" ACU" />
       </ChartCard>
     </div>
   )
