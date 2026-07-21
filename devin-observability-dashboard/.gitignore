@@ -13,6 +13,11 @@ frontend/dist/
 .env
 *.local
 
+# Runtime automation state
+backend/data/
+data/
+.pytest_cache/
+
 # OS / editor
 .DS_Store
 .idea/

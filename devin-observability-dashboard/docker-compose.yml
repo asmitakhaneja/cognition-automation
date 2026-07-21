@@ -1,0 +1,15 @@
+services:
+  dashboard:
+    build: .
+    ports:
+      - "8000:8000"
+    # Load all configuration from .env (copy .env.example -> .env first).
+    # Without a .env the app simply runs on demo data.
+    env_file:
+      - .env
+    # STORE_PATH is a container path, so it's fixed here rather than in .env.
+    environment:
+      - STORE_PATH=/data/state.json
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

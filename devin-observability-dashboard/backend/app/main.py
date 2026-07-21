@@ -4,9 +4,11 @@ Exposes a small, normalized JSON API for the dashboard frontend and serves the
 built single-page app. In demo mode it runs entirely on the bundled synthetic
 dataset; with a credential configured it proxies the live Devin API.
 """
+
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -18,9 +20,12 @@ from fastapi.staticfiles import StaticFiles
 
 from . import mock_data
 from .aggregate import build_overview
+from .automation.orchestrator import Orchestrator, demo_records
+from .automation.store import Store
+from .automation.webhook import create_router
 from .config import load_settings
 from .devin_client import DevinClient
-from .models import MessagesResponse, Overview
+from .models import AutomationStatus, MessagesResponse, Overview
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dashboard")
@@ -31,9 +36,27 @@ app = FastAPI(title="Devin Observability Dashboard", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+# Real-time automation state (webhook-triggered remediation sessions).
+store = Store(settings.store_path)
+
+if settings.use_mock:
+    store.replace_all(demo_records())
+
+
+def _make_orchestrator() -> Orchestrator:
+    if not settings.automation_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="automation not configured (needs DEVIN_API_KEY + DEVIN_ORG_ID)",
+        )
+    return Orchestrator(settings)
+
+
+app.include_router(create_router(settings, store, _make_orchestrator), prefix="/api")
 
 # Very small in-process TTL cache to avoid hammering the API on every reload.
 _CACHE: dict[str, tuple[float, object]] = {}
@@ -73,7 +96,9 @@ def overview(days: int = Query(default=30, ge=1, le=90)) -> Overview:
 
     client = DevinClient(settings)
     try:
-        created_after = int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp())
+        created_after = int(
+            (datetime.now(timezone.utc) - timedelta(days=days)).timestamp()
+        )
         sessions = client.list_sessions(created_after=created_after)
         time_after = created_after
         time_before = int(time.time())
@@ -106,7 +131,9 @@ def session_messages(session_id: str) -> MessagesResponse:
         if target is None:
             raise HTTPException(status_code=404, detail="Session not found")
         return MessagesResponse(
-            session_id=session_id, is_demo=True, items=mock_data.generate_messages(target)
+            session_id=session_id,
+            is_demo=True,
+            items=mock_data.generate_messages(target),
         )
 
     client = DevinClient(settings)
@@ -120,10 +147,49 @@ def session_messages(session_id: str) -> MessagesResponse:
         client.close()
 
 
+@app.get("/api/automation", response_model=AutomationStatus)
+def automation_status() -> AutomationStatus:
+    """Real-time view of webhook-triggered remediation sessions."""
+    return AutomationStatus(
+        enabled=settings.automation_enabled,
+        is_demo=settings.use_mock,
+        repo=settings.github_repo,
+        trigger_label=settings.trigger_label,
+        generated_at=int(time.time()),
+        summary=store.summary(),
+        records=store.all(),
+    )
+
+
+@app.on_event("startup")
+def _start_poller() -> None:
+    """Keep webhook-triggered session statuses/PRs fresh in the background."""
+    if not settings.automation_enabled:
+        logger.info("Automation poller disabled (no DEVIN_ORG_ID/API key).")
+        return
+
+    def loop() -> None:
+        orchestrator = Orchestrator(settings)
+        logger.info(
+            "Automation poller started (interval=%ds)",
+            settings.poll_interval_sec,
+        )
+        while True:
+            try:
+                orchestrator.poll_once(store)
+            except Exception:  # noqa: BLE001 - keep the daemon alive
+                logger.exception("automation poller error")
+            time.sleep(settings.poll_interval_sec)
+
+    threading.Thread(target=loop, daemon=True).start()
+
+
 # -- static frontend --------------------------------------------------------
 _FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 if _FRONTEND_DIST.is_dir():
-    app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
+    app.mount(
+        "/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets"
+    )
 
     @app.get("/")
     def index() -> FileResponse:

@@ -1,4 +1,4 @@
-import type { MessagesResponse, Overview } from "./types";
+import type { AutomationStatus, MessagesResponse, Overview } from "./types";
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -17,4 +17,8 @@ export function fetchMessages(sessionId: string): Promise<MessagesResponse> {
   return getJson<MessagesResponse>(
     `/api/sessions/${encodeURIComponent(sessionId)}/messages`,
   );
+}
+
+export function fetchAutomation(): Promise<AutomationStatus> {
+  return getJson<AutomationStatus>("/api/automation");
 }

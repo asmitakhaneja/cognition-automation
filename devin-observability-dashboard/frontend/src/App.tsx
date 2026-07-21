@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchOverview } from "./api";
+import { AutomationPanel } from "./components/AutomationPanel";
 import { ActivityChart, CostChart, Donut, HBar } from "./components/Charts";
 import { Kpi } from "./components/Kpi";
 import { SessionDrawer } from "./components/SessionDrawer";
@@ -133,6 +134,12 @@ export function App() {
           </section>
 
           <section className="grid one">
+            <div className="card">
+              <AutomationPanel />
+            </div>
+          </section>
+
+          <section className="grid one">
             <Card
               title="Recent activity"
               subtitle="Latest sessions — click a row for the full log"
@@ -143,8 +150,8 @@ export function App() {
 
           <footer className="foot">
             {data.is_demo
-              ? "Showing built-in demo data. Set DEVIN_API_KEY on the backend to load live enterprise data."
-              : "Live data from the Devin enterprise API."}{" "}
+              ? "Showing built-in demo data. Set DEVIN_API_KEY + DEVIN_ORG_ID on the backend to load live data."
+              : "Live data from the Devin organization API."}{" "}
             · Last {data.range_days} days
           </footer>
         </main>

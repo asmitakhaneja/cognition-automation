@@ -2,8 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [dev, main]
   pull_request:
+
+defaults:
+  run:
+    working-directory: devin-observability-dashboard
 
 jobs:
   backend:
@@ -14,10 +18,15 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install deps
-        working-directory: backend
+        working-directory: devin-observability-dashboard/backend
         run: pip install -r requirements-dev.txt
+      - name: Lint (black + flake8)
+        working-directory: devin-observability-dashboard/backend
+        run: |
+          black --check app tests
+          flake8 app tests
       - name: Run tests
-        working-directory: backend
+        working-directory: devin-observability-dashboard/backend
         run: python -m pytest -q
 
   frontend:
@@ -28,8 +37,8 @@ jobs:
         with:
           node-version: "20"
       - name: Install deps
-        working-directory: frontend
+        working-directory: devin-observability-dashboard/frontend
         run: npm ci
       - name: Typecheck & build
-        working-directory: frontend
+        working-directory: devin-observability-dashboard/frontend
         run: npm run build

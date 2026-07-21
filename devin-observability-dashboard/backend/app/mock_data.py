@@ -5,6 +5,7 @@ functional out of the box (and so the UI can be developed without hitting the
 live API). The data is generated with a fixed seed so the dashboard looks the
 same on every load.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -111,7 +112,9 @@ def _day_activity(rng: random.Random, day_index: int) -> int:
 def generate_sessions() -> list[Session]:
     rng = random.Random(_SEED)
     now = datetime.now(timezone.utc)
-    start = (now - timedelta(days=_DAYS - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = (now - timedelta(days=_DAYS - 1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
 
     sessions: list[Session] = []
     counter = 0
@@ -125,7 +128,15 @@ def generate_sessions() -> list[Session]:
             category = rng.choice(_CATEGORIES)
             origin = _weighted_choice(
                 rng,
-                [("webapp", 34), ("slack", 24), ("api", 16), ("linear", 9), ("jira", 7), ("cli", 6), ("automation", 4)],
+                [
+                    ("webapp", 34),
+                    ("slack", 24),
+                    ("api", 16),
+                    ("linear", 9),
+                    ("jira", 7),
+                    ("cli", 6),
+                    ("automation", 4),
+                ],
             )
             repo = rng.choice(_REPOS)
 
@@ -145,11 +156,15 @@ def generate_sessions() -> list[Session]:
                 merged = rng.random() < 0.78
                 state = "merged" if merged else rng.choice(["open", "closed"])
                 prs.append(
-                    PullRequest(url=f"https://github.com/{repo}/pull/{pr_number}", state=state)
+                    PullRequest(
+                        url=f"https://github.com/{repo}/pull/{pr_number}", state=state
+                    )
                 )
 
             title = rng.choice(_TITLES)
-            sid = "devin-" + hashlib.sha1(f"{_SEED}-{counter}".encode()).hexdigest()[:24]
+            sid = (
+                "devin-" + hashlib.sha1(f"{_SEED}-{counter}".encode()).hexdigest()[:24]
+            )
 
             sessions.append(
                 Session(
@@ -182,14 +197,18 @@ def org_display_name(org_id: str | None) -> str:
 
 
 def generate_messages(session: Session) -> list[Message]:
-    rng = random.Random(int(hashlib.sha1(session.session_id.encode()).hexdigest(), 16) % (2**32))
+    rng = random.Random(
+        int(hashlib.sha1(session.session_id.encode()).hexdigest(), 16) % (2**32)
+    )
     base = session.created_at
     items: list[Message] = []
 
     def add(source: str, text: str, offset: int) -> None:
         items.append(
             Message(
-                event_id=hashlib.sha1(f"{session.session_id}-{len(items)}".encode()).hexdigest()[:16],
+                event_id=hashlib.sha1(
+                    f"{session.session_id}-{len(items)}".encode()
+                ).hexdigest()[:16],
                 source=source,
                 message=text,
                 created_at=base + offset,
@@ -198,14 +217,30 @@ def generate_messages(session: Session) -> list[Message]:
 
     add("user", session.title or "Please work on this task.", 0)
     add("devin", "Understood. Cloning the repo and inspecting the failing test.", 60)
-    add("devin", "Reproduced the issue locally. Root cause looks like a race in the setup fixture.", 240 + rng.randint(0, 120))
-    add("devin", "Applied a fix and re-ran the suite — all green. Running lint and typecheck.", 900 + rng.randint(0, 300))
+    add(
+        "devin",
+        "Reproduced locally. Root cause is a race in the setup fixture.",
+        240 + rng.randint(0, 120),
+    )
+    add(
+        "devin",
+        "Applied a fix and re-ran the suite — all green. Running lint and typecheck.",
+        900 + rng.randint(0, 300),
+    )
     if session.pull_requests:
-        add("devin", f"Opened a PR: {session.pull_requests[0].url}", 1200 + rng.randint(0, 300))
+        add(
+            "devin",
+            f"Opened a PR: {session.pull_requests[0].url}",
+            1200 + rng.randint(0, 300),
+        )
     if session.status == "error":
         add("devin", "Hit an environment error I could not resolve; escalating.", 1500)
     elif session.status in {"running", "claimed", "new"}:
         add("devin", "Still working through the remaining edge cases.", 1500)
     else:
-        add("devin", "Task complete. Summary and diff are in the PR description.", 1500 + rng.randint(0, 200))
+        add(
+            "devin",
+            "Task complete. Summary and diff are in the PR description.",
+            1500 + rng.randint(0, 200),
+        )
     return items

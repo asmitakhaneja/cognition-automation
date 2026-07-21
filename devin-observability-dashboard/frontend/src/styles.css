@@ -459,6 +459,124 @@ body {
   font-size: 13px;
 }
 
+/* automation panel */
+.automation-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.automation-head h3 {
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.automation-head span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.automation-head code {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+}
+
+.live-dot.pulse {
+  animation: live-pulse 0.6s ease-out;
+}
+
+@keyframes live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
+  }
+}
+
+.live-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #22c55e;
+}
+
+.automation-cards {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.automation-stat {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.automation-stat .num {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.automation-stat .label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.automation-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.automation-table thead th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.automation-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.automation-table a {
+  color: #93c5fd;
+  text-decoration: none;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 7px;
+}
+
 @media (max-width: 1100px) {
   .kpi-row {
     grid-template-columns: repeat(3, 1fr);
@@ -466,5 +584,8 @@ body {
   .grid.two,
   .grid.three {
     grid-template-columns: 1fr;
+  }
+  .automation-cards {
+    grid-template-columns: repeat(3, 1fr);
   }
 }

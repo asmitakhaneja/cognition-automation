@@ -4,6 +4,7 @@ These are the *normalized* shapes the frontend consumes. They are deliberately
 decoupled from the raw Devin API payloads so that the aggregation layer can
 absorb schema differences between API versions.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel
@@ -86,3 +87,45 @@ class MessagesResponse(BaseModel):
     session_id: str
     is_demo: bool
     items: list[Message]
+
+
+class AutomationRecord(BaseModel):
+    """A single GitHub issue that was routed to a Devin session."""
+
+    issue_number: int
+    title: str | None = None
+    category: str | None = None
+    status: str = "unknown"
+    session_id: str | None = None
+    session_url: str | None = None
+    pr_url: str | None = None
+    created_at: float | None = None
+    updated_at: float | None = None
+
+
+class AutomationSummary(BaseModel):
+    total_triggered: int = 0
+    in_progress: int = 0
+    finished: int = 0
+    prs_opened: int = 0
+    blocked_or_failed: int = 0
+    success_rate_pct: float | None = None
+    avg_time_to_finish_sec: float | None = None
+
+
+class AutomationStatus(BaseModel):
+    """Real-time view of webhook-triggered remediation sessions."""
+
+    enabled: bool
+    is_demo: bool
+    repo: str
+    trigger_label: str
+    generated_at: int
+    summary: AutomationSummary
+    records: list[AutomationRecord]
+
+
+class TriggerResult(BaseModel):
+    skipped: bool
+    reason: str | None = None
+    record: AutomationRecord | None = None
