@@ -75,6 +75,23 @@ th { color: #94a3b8; font-weight: 500; font-size: 0.8rem; text-transform: upperc
     background: #334155; color: #94a3b8; border-radius: 10px;
     font-size: 0.65rem; padding: 1px 6px; margin-right: 3px;
 }
+/* Charts */
+.charts {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem; margin-bottom: 2rem;
+}
+.chart-card { background: #1e293b; border-radius: 8px; padding: 1rem 1.25rem; }
+.chart-title { font-weight: 600; font-size: 0.95rem; }
+.chart-sub { color: #94a3b8; font-size: 0.74rem; margin-bottom: 0.9rem; }
+.chart-empty { color: #64748b; font-size: 0.8rem; }
+.funnel { display: block; }
+.bars { display: flex; flex-direction: column; gap: 0.55rem; }
+.bar-row { display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 0.6rem; }
+.bar-label { font-size: 0.76rem; color: #cbd5e1; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-track { background: #0f172a; border-radius: 5px; height: 14px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 5px; min-width: 2px; transition: width 0.3s ease; }
+.bar-value { font-size: 0.76rem; color: #94a3b8; font-variant-numeric: tabular-nums; }
+
 tr[data-issue] { cursor: pointer; }
 tr[data-issue]:hover td { background: #1e293b; }
 a { color: #60a5fa; text-decoration: none; }

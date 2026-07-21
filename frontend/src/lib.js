@@ -29,3 +29,38 @@ export function formatAcus(acus) {
   if (acus === null || acus === undefined) return '—'
   return String(Math.round(Number(acus) * 10) / 10)
 }
+
+// Roll the raw records + summary into the datasets the charts render. Everything
+// here is derived from parameters the backend already captures per session
+// (status, category, pr_status, acus_consumed) — no new backend data needed.
+export function buildCharts(records, summary) {
+  const byKey = (getter) => {
+    const counts = {}
+    for (const r of records) {
+      const k = getter(r)
+      if (!k) continue
+      counts[k] = (counts[k] || 0) + 1
+    }
+    return Object.entries(counts)
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value)
+  }
+
+  const funnel = [
+    { label: 'Picked up', value: summary?.total_triggered || 0 },
+    { label: 'Fixes proposed', value: summary?.prs_opened || 0 },
+    { label: 'Fixes shipped', value: summary?.prs_merged || 0 },
+  ]
+
+  const acusByIssue = records
+    .filter((r) => r.acus_consumed !== null && r.acus_consumed !== undefined)
+    .map((r) => ({ label: `#${r.issue_number}`, value: Math.round(Number(r.acus_consumed) * 10) / 10 }))
+
+  return {
+    funnel,
+    byStatus: byKey((r) => r.status),
+    byCategory: byKey((r) => r.category),
+    acusByIssue,
+  }
+}
+

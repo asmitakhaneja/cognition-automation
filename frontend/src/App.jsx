@@ -1,26 +1,27 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchStatus, subscribeEvents, relativeTime, formatAcus } from './lib.js'
+import Charts from './Charts.jsx'
 
 const CARD_FIELDS = [
-  { key: 'total_triggered', label: 'Triggered' },
-  { key: 'in_progress', label: 'In progress' },
-  { key: 'finished', label: 'Finished' },
-  { key: 'prs_opened', label: 'PRs opened' },
-  { key: 'prs_merged', label: 'PRs merged' },
-  { key: 'blocked_or_failed', label: 'Blocked/Failed' },
-  { key: 'success_rate_pct', label: 'Success rate', suffix: '%' },
-  { key: 'total_acus', label: 'Total ACUs' },
-  { key: 'avg_acus_per_fix', label: 'ACUs / fix' },
+  { key: 'total_triggered', label: 'Issues Picked Up', hint: 'Total issues Devin was triggered on' },
+  { key: 'in_progress', label: 'Currently Working', hint: 'Sessions still running' },
+  { key: 'finished', label: 'Completed', hint: 'Sessions that reached a terminal state' },
+  { key: 'prs_opened', label: 'Fixes Proposed', hint: 'Pull requests opened' },
+  { key: 'prs_merged', label: 'Fixes Shipped', hint: 'Pull requests merged to the codebase' },
+  { key: 'blocked_or_failed', label: 'Needs Attention', hint: 'Blocked, expired or stopped sessions' },
+  { key: 'success_rate_pct', label: 'Fix Success Rate', hint: '% of issues that produced a PR', suffix: '%' },
+  { key: 'total_acus', label: 'Total Compute (ACUs)', hint: 'Total Agent Compute Units consumed' },
+  { key: 'avg_acus_per_fix', label: 'Compute per Fix', hint: 'Average ACUs per delivered PR' },
 ]
 
 function SummaryCards({ summary }) {
   return (
     <div className="cards">
-      {CARD_FIELDS.map(({ key, label, suffix }) => {
+      {CARD_FIELDS.map(({ key, label, suffix, hint }) => {
         const val = summary?.[key]
         const has = val !== null && val !== undefined
         return (
-          <div className="card" key={key}>
+          <div className="card" key={key} title={hint}>
             <div className="num">{has ? `${val}${suffix && has ? suffix : ''}` : '—'}</div>
             <div className="label">{label}</div>
           </div>
@@ -160,6 +161,8 @@ export default function App() {
       {error && <p style={{ color: '#f87171' }}>Failed to load: {error}</p>}
 
       <SummaryCards summary={summary} />
+
+      {records.length > 0 && <Charts records={records} summary={summary} />}
 
       <table>
         <thead>
