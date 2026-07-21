@@ -9,6 +9,7 @@ Authentication uses a single ``Authorization: Bearer <key>`` header, which works
 for both v3 service-user tokens (``cog_``) and enterprise-admin personal keys
 (``apk_user_``).
 """
+
 from __future__ import annotations
 
 import logging
@@ -49,7 +50,9 @@ class DevinClient:
         self._client.close()
 
     # -- sessions ---------------------------------------------------------
-    def list_sessions(self, created_after: int | None = None, max_items: int = 2000) -> list[Session]:
+    def list_sessions(
+        self, created_after: int | None = None, max_items: int = 2000
+    ) -> list[Session]:
         items: list[dict[str, Any]] = []
         cursor: str | None = None
         while len(items) < max_items:
@@ -97,7 +100,9 @@ class DevinClient:
         )
 
     # -- consumption ------------------------------------------------------
-    def daily_consumption(self, time_after: int | None, time_before: int | None) -> list[dict[str, Any]]:
+    def daily_consumption(
+        self, time_after: int | None, time_before: int | None
+    ) -> list[dict[str, Any]]:
         """Enterprise-wide daily ACU consumption, broken down by product."""
         try:
             params: dict[str, Any] = {}
@@ -108,7 +113,10 @@ class DevinClient:
             resp = self._client.get("/v3/enterprise/consumption/daily", params=params)
             resp.raise_for_status()
             return resp.json().get("consumption_by_date", [])
-        except (httpx.HTTPError, ValueError) as exc:  # pragma: no cover - network dependent
+        except (
+            httpx.HTTPError,
+            ValueError,
+        ) as exc:  # pragma: no cover - network dependent
             logger.warning("daily_consumption unavailable: %s", exc)
             return []
 
@@ -120,7 +128,9 @@ class DevinClient:
             params: dict[str, Any] = {"first": 100}
             if cursor:
                 params["after"] = cursor
-            resp = self._client.get(f"/v3/enterprise/sessions/{devin_id}/messages", params=params)
+            resp = self._client.get(
+                f"/v3/enterprise/sessions/{devin_id}/messages", params=params
+            )
             resp.raise_for_status()
             data = resp.json()
             batch = data.get("items", [])

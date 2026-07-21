@@ -3,6 +3,7 @@
 All heavy lifting (grouping, rate calculations, time bucketing) happens here so
 the frontend only ever renders pre-computed numbers.
 """
+
 from __future__ import annotations
 
 import time
@@ -23,7 +24,9 @@ def _utc_date(ts: int) -> str:
 
 
 def _session_merged_prs(session: Session) -> int:
-    return sum(1 for pr in session.pull_requests if (pr.state or "").lower() == "merged")
+    return sum(
+        1 for pr in session.pull_requests if (pr.state or "").lower() == "merged"
+    )
 
 
 def _pretty_category(name: str) -> str:
@@ -58,7 +61,9 @@ def build_overview(
         success_rate=round(successful / total_sessions, 4) if total_sessions else 0.0,
         active_users=active_users,
         acus_per_merged_pr=round(total_acus / prs_merged, 2) if prs_merged else 0.0,
-        avg_acus_per_session=round(total_acus / total_sessions, 2) if total_sessions else 0.0,
+        avg_acus_per_session=(
+            round(total_acus / total_sessions, 2) if total_sessions else 0.0
+        ),
     )
 
     timeseries = _build_timeseries(sessions, range_days, consumption_by_date)

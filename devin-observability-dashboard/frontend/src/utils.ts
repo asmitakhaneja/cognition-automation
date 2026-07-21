@@ -44,6 +44,26 @@ export function statusColor(status: string): string {
   return STATUS_COLORS[status] ?? "#94a3b8";
 }
 
+const AUTOMATION_STATUS_COLORS: Record<string, string> = {
+  finished: "#22c55e",
+  running: "#38bdf8",
+  blocked: "#ef4444",
+  expired: "#ef4444",
+  stopped: "#ef4444",
+};
+
+export function automationStatusColor(status: string): string {
+  return AUTOMATION_STATUS_COLORS[status] ?? "#f59e0b";
+}
+
+export function formatDuration(seconds: number | null): string {
+  if (!seconds) return "—";
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  return `${hrs}h ${mins % 60}m`;
+}
+
 export function mergedPrUrl(session: {
   pull_requests: { url: string; state: string | null }[];
 }): { url: string; state: string } | null {

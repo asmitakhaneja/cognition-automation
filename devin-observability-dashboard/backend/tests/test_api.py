@@ -1,4 +1,5 @@
 """Smoke tests for the dashboard API (demo mode)."""
+
 from fastapi.testclient import TestClient
 
 from app.main import app

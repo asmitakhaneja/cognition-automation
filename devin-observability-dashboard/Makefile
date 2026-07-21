@@ -1,8 +1,8 @@
-.PHONY: install build backend dev clean
+.PHONY: install build backend dev clean test lint fmt docker
 
 # One-shot setup: backend venv + frontend deps + production frontend build.
 install:
-	cd backend && python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+	cd backend && python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements-dev.txt
 	cd frontend && npm install
 
 build:
@@ -18,6 +18,22 @@ run: build backend
 # Frontend dev server with hot reload on :5173 (proxies /api to :8000).
 dev:
 	cd frontend && npm run dev
+
+# Backend test suite.
+test:
+	cd backend && . .venv/bin/activate && python -m pytest -q
+
+# PEP8: check formatting + lint.
+lint:
+	cd backend && . .venv/bin/activate && black --check app tests && flake8 app tests
+
+# Auto-format Python.
+fmt:
+	cd backend && . .venv/bin/activate && black app tests
+
+# Build the combined production image (frontend + backend).
+docker:
+	docker build -t devin-observability-dashboard .
 
 clean:
 	rm -rf frontend/dist frontend/node_modules backend/.venv

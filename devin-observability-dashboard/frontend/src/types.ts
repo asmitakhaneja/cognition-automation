@@ -76,3 +76,35 @@ export interface MessagesResponse {
   is_demo: boolean;
   items: Message[];
 }
+
+export interface AutomationRecord {
+  issue_number: number;
+  title: string | null;
+  category: string | null;
+  status: string;
+  session_id: string | null;
+  session_url: string | null;
+  pr_url: string | null;
+  created_at: number | null;
+  updated_at: number | null;
+}
+
+export interface AutomationSummary {
+  total_triggered: number;
+  in_progress: number;
+  finished: number;
+  prs_opened: number;
+  blocked_or_failed: number;
+  success_rate_pct: number | null;
+  avg_time_to_finish_sec: number | null;
+}
+
+export interface AutomationStatus {
+  enabled: boolean;
+  is_demo: boolean;
+  repo: string;
+  trigger_label: string;
+  generated_at: number;
+  summary: AutomationSummary;
+  records: AutomationRecord[];
+}

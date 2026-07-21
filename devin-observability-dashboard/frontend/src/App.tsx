@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchOverview } from "./api";
+import { AutomationPanel } from "./components/AutomationPanel";
 import { ActivityChart, CostChart, Donut, HBar } from "./components/Charts";
 import { Kpi } from "./components/Kpi";
 import { SessionDrawer } from "./components/SessionDrawer";
@@ -130,6 +131,12 @@ export function App() {
             <Card title="Busiest repositories" subtitle="Sessions by repo">
               <HBar data={data.by_repo} metric="count" color="#38bdf8" />
             </Card>
+          </section>
+
+          <section className="grid one">
+            <div className="card">
+              <AutomationPanel />
+            </div>
           </section>
 
           <section className="grid one">
