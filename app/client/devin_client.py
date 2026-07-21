@@ -225,7 +225,7 @@ def get_session_messages(session_id: str) -> list[dict]:
         data = resp.json()
         if isinstance(data, list):
             return data
-        return data.get("messages", [])
+        return data.get("messages") or data.get("items", [])
     except Exception:
         logger.warning("Could not fetch messages for session %s", session_id, exc_info=True)
         return []
@@ -233,7 +233,7 @@ def get_session_messages(session_id: str) -> list[dict]:
 
 def extract_insights_fields(insights: dict) -> dict:
     """Normalise a Devin insights payload into flat store fields."""
-    clf = insights.get("classification") or {}
+    clf = (insights.get("analysis") or {}).get("classification") or insights.get("classification") or {}
     return {
         "acus_consumed": insights.get("acus_consumed"),
         "session_size": insights.get("session_size"),

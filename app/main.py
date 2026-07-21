@@ -1,14 +1,17 @@
 import asyncio
 import hashlib
 import hmac
+import html as _html
 import json
 import logging
+import os
 import threading
 import time
 from urllib.parse import unquote_plus
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.templating import Jinja2Templates
 
 from . import store
 from .client import devin_client, github_client
@@ -21,6 +24,9 @@ from .settings import (
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Devin x Superset Remediation Orchestrator")
+
+_TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
+templates = Jinja2Templates(directory=_TEMPLATES_DIR)
 
 
 def _relative_time(ts: float | None) -> str:
@@ -106,8 +112,8 @@ def _session_watcher(session_id: str, issue_number: int) -> None:
 
             # Fetch messages on every tick (non-fatal)
             messages = devin_client.get_session_messages(session_id)
-            num_user = sum(1 for m in messages if m.get("role") == "user")
-            num_devin = sum(1 for m in messages if m.get("role") in ("assistant", "devin"))
+            num_user = sum(1 for m in messages if m.get("source") == "user")
+            num_devin = sum(1 for m in messages if m.get("source") in ("assistant", "devin"))
 
             upsert_kwargs = dict(
                 status=new_status,
@@ -119,11 +125,10 @@ def _session_watcher(session_id: str, issue_number: int) -> None:
                 num_devin_messages=num_devin,
             )
 
-            # Fetch insights only when terminal (non-fatal)
-            if new_status in devin_client.TERMINAL_STATUSES:
-                insights = devin_client.get_session_insights(session_id)
-                if insights:
-                    upsert_kwargs.update(devin_client.extract_insights_fields(insights))
+            # Fetch insights on every tick so ACUs stay current (non-fatal)
+            insights = devin_client.get_session_insights(session_id)
+            if insights:
+                upsert_kwargs.update(devin_client.extract_insights_fields(insights))
 
             store.upsert_record(issue_number, **upsert_kwargs)
             _broadcast({
@@ -346,7 +351,7 @@ async def sse_events(request: Request):
 
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard():
+def dashboard(request: Request):
     s = store.summary()
     records = store.all_records()
 
@@ -358,16 +363,6 @@ def dashboard():
         tools_html = f'<br><small class="tools">{tools}</small>' if tools else ''
         detail = r.get('status_detail') or ''
         detail_html = f'<br><small class="detail">{detail}</small>' if detail else ''
-        size = (r.get('session_size') or '').lower()
-        size_html = (
-            f'<span class="tag size-{size}">{size.upper()}</span> '
-            if size else ''
-        )
-        intel = (
-            f'{size_html}'
-            f'H:{r.get("num_user_messages", "?")}'
-            f'&thinsp;/&thinsp;D:{r.get("num_devin_messages", "?")}'
-        )
         acus = r.get('acus_consumed')
         acus_html = str(round(float(acus), 1)) if acus is not None else '—'
         clf_conf = r.get('classification_confidence')
@@ -378,112 +373,69 @@ def dashboard():
 
         msgs = r.get('messages') or []
         if msgs:
-            msg_items = "".join(
-                f'<div class="msg msg-{m.get("role","unknown")}">'
-                f'<strong>{m.get("role","?")}</strong>: '
-                f'{m.get("content","") or m.get("message","")}'
-                f'</div>'
-                for m in msgs
-            )
+            def _bubble(m, idx):
+                src = m.get("source", "unknown")
+                is_user = src == "user"
+                role_cls = "bubble-user" if is_user else "bubble-devin"
+                avatar_cls = "avatar-user" if is_user else "avatar-devin"
+                avatar_label = "You" if is_user else "Dev"
+                label = "You" if is_user else "Devin"
+                raw_ts = m.get("created_at")
+                ts_html = f'<span style="margin-left:6px">{raw_ts}</span>' if raw_ts else ""
+                text = _html.escape(m.get("message", "") or m.get("content", ""))
+                return (
+                    f'<div class="bubble-row {role_cls}">'
+                    f'<div class="avatar {avatar_cls}">{avatar_label}</div>'
+                    f'<div class="bubble">'
+                    f'<div class="bubble-meta"><strong>{label}</strong>{ts_html}</div>'
+                    f'<div class="bubble-text" id="bt-{n}-{idx}">{text}</div>'
+                    f'<button class="expand-btn" onclick="toggleBubble(\'bt-{n}-{idx}\',this)">Show more</button>'
+                    f'</div></div>'
+                )
+            msg_items = "".join(_bubble(m, i) for i, m in enumerate(msgs))
         else:
-            msg_items = '<em style="color:#64748b">No messages yet.</em>'
+            msg_items = '<p style="color:#475569;font-size:0.8rem;text-align:center;padding:1rem 0">No messages yet.</p>'
 
-        data_row = f"""
-        <tr data-issue="{n}" title="Click to toggle session log">
-            <td>#{n}</td>
-            <td>{r.get('title','')}</td>
-            <td><span class="tag">{r.get('category','')}</span>{conf_html}{tools_html}</td>
-            <td class="ts">{_relative_time(r.get('created_at'))}</td>
-            <td class="status-{r.get('status','unknown')}">{r.get('status','unknown')}{detail_html}</td>
-            <td>{f'<a href="{r["pr_url"]}" target="_blank">PR ↗</a>' if r.get('pr_url') else '—'}</td>
-            <td><span class="tag pr-{r.get('pr_status','')}">{r.get('pr_status') or '—'}</span></td>
-            <td class="ts">{acus_html}</td>
-            <td class="ts">{intel}</td>
-            <td>{f'<a href="{r["session_url"]}" target="_blank">session ↗</a>' if r.get('session_url') else '—'} ▶</td>
-        </tr>"""
-        log_row = f"""
-        <tr id="log-{n}" style="display:none">
-            <td colspan="10" class="log-cell">
-                <div class="log-container">{msg_items}</div>
-            </td>
-        </tr>"""
+        msg_count = len(msgs)
+        msg_badge = f'<span class="msg-badge">{msg_count}</span>' if msg_count else ''
+        pr_link = f'<a href="{r["pr_url"]}" target="_blank">PR ↗</a>' if r.get("pr_url") else "—"
+        session_link = (
+            f'<a href="{r["session_url"]}" target="_blank">{msg_badge}session ↗</a> ▶'
+            if r.get("session_url") else "—"
+        )
+        data_row = (
+            f'<tr data-issue="{n}" title="Click to toggle session log">'
+            f'<td>#{n}</td>'
+            f'<td>{r.get("title","")}</td>'
+            f'<td><span class="tag">{r.get("category","")}</span>{conf_html}{tools_html}</td>'
+            f'<td class="ts">{_relative_time(r.get("created_at"))}</td>'
+            f'<td class="status-{r.get("status","unknown")}">{r.get("status","unknown")}{detail_html}</td>'
+            f'<td>{pr_link}</td>'
+            f'<td><span class="tag pr-{r.get("pr_status","")}">{r.get("pr_status") or "—"}</span></td>'
+            f'<td class="ts">{acus_html}</td>'
+            f'<td>{session_link}</td>'
+            f'</tr>'
+        )
+        log_row = (
+            f'<tr id="log-{n}" style="display:none">'
+            f'<td colspan="9" class="log-cell">'
+            f'<div class="log-panel">'
+            f'<div class="log-header">'
+            f'<span><strong>Session log</strong> · issue #{n} · {msg_count} message{"s" if msg_count != 1 else ""}</span>'
+            f'<span class="log-close" onclick="event.stopPropagation();document.getElementById(\'log-{n}\').style.display=\'none\'">✕ close</span>'
+            f'</div>'
+            f'<div class="log-messages">{msg_items}</div>'
+            f'</div></td></tr>'
+        )
         return data_row + log_row
 
     rows = "".join(_row_pair(r) for r in records)
-
-    return f"""
-    <html>
-    <head>
-        <title>Devin Remediation Dashboard</title>
-        <style>
-            body {{ font-family: -apple-system, sans-serif; margin: 2rem; background: #0f172a; color: #e2e8f0; }}
-            h1 {{ font-weight: 600; }}
-            .cards {{ display: flex; gap: 1rem; margin-bottom: 2rem; }}
-            .card {{ background: #1e293b; padding: 1rem 1.5rem; border-radius: 8px; min-width: 120px; }}
-            .card .num {{ font-size: 1.8rem; font-weight: 700; }}
-            .card .label {{ font-size: 0.8rem; color: #94a3b8; }}
-            table {{ width: 100%; border-collapse: collapse; }}
-            th, td {{ text-align: left; padding: 0.6rem; border-bottom: 1px solid #334155; }}
-            th {{ color: #94a3b8; font-weight: 500; font-size: 0.8rem; text-transform: uppercase; }}
-            .tag {{ background: #334155; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; }}
-            .status-finished {{ color: #4ade80; }}
-            .status-running {{ color: #facc15; }}
-            .status-blocked, .status-expired, .status-stopped {{ color: #f87171; }}
-            .ts {{ color: #94a3b8; font-size: 0.8rem; }}
-            .detail {{ color: #94a3b8; font-size: 0.72rem; }}
-            .tools {{ color: #64748b; font-size: 0.7rem; }}
-            .pr-open {{ background: #14532d; color: #4ade80; }}
-            .pr-merged {{ background: #3b0764; color: #c084fc; }}
-            .pr-closed {{ background: #450a0a; color: #f87171; }}
-            .size-s {{ background: #1e3a5f; color: #93c5fd; }}
-            .size-m {{ background: #3b2810; color: #fbbf24; }}
-            .size-l {{ background: #2d1b1b; color: #f87171; }}
-            .log-cell {{ padding: 0 !important; }}
-            .log-container {{ max-height: 280px; overflow-y: auto; background: #1e293b;
-                              padding: 0.75rem; border-radius: 6px; font-size: 0.78rem; }}
-            .msg {{ padding: 3px 8px; margin: 2px 0; border-radius: 4px; word-break: break-word; }}
-            .msg-user {{ background: #1e3a5f; }}
-            .msg-assistant, .msg-devin {{ background: #1a2e1a; }}
-            tr[data-issue] {{ cursor: pointer; }}
-            tr[data-issue]:hover td {{ background: #1e293b; }}
-            a {{ color: #60a5fa; text-decoration: none; }}
-        </style>
-    </head>
-    <body>
-        <h1>Devin Remediation Dashboard</h1>
-        <p style="color:#94a3b8">Repo: {github_client.REPO_FULL_NAME} · Updates in real-time</p>
-        <div class="cards">
-            <div class="card"><div class="num">{s['total_triggered']}</div><div class="label">Triggered</div></div>
-            <div class="card"><div class="num">{s['in_progress']}</div><div class="label">In progress</div></div>
-            <div class="card"><div class="num">{s['finished']}</div><div class="label">Finished</div></div>
-            <div class="card"><div class="num">{s['prs_opened']}</div><div class="label">PRs opened</div></div>
-            <div class="card"><div class="num">{s['prs_merged']}</div><div class="label">PRs merged</div></div>
-            <div class="card"><div class="num">{s['blocked_or_failed']}</div><div class="label">Blocked/Failed</div></div>
-            <div class="card"><div class="num">{s['success_rate_pct'] or '—'}%</div><div class="label">Success rate</div></div>
-            <div class="card"><div class="num">{s['avg_time_to_finish_sec'] and int(s['avg_time_to_finish_sec']//60) or '—'}m</div><div class="label">Avg time to PR</div></div>
-            <div class="card"><div class="num">{s['total_acus'] if s['total_acus'] is not None else '—'}</div><div class="label">Total ACUs</div></div>
-            <div class="card"><div class="num">{s['avg_acus_per_fix'] if s['avg_acus_per_fix'] is not None else '—'}</div><div class="label">ACUs / fix</div></div>
-        </div>
-        <table>
-            <tr><th>Issue</th><th>Title</th><th>Category</th><th>Started</th><th>Status</th><th>PR</th><th>PR Status</th><th>ACUs</th><th>Intel</th><th>Devin Session</th></tr>
-            {rows or '<tr><td colspan="10" style="color:#64748b">No issues triggered yet.</td></tr>'}
-        </table>
-        <script>
-            const es = new EventSource('/events');
-            es.onmessage = () => location.reload();
-            es.onerror = () => setTimeout(() => location.reload(), 5000);
-
-            document.querySelectorAll('tr[data-issue]').forEach(row => {{
-                row.addEventListener('click', () => {{
-                    const log = document.getElementById('log-' + row.dataset.issue);
-                    if (!log) return;
-                    log.style.display = log.style.display === 'none' ? 'table-row' : 'none';
-                }});
-            }});
-        </script>
-    </body>
-    </html>
-    """
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "repo": github_client.REPO_FULL_NAME,
+        "s": s,
+        "rows": rows,
+    })
 
 
 @app.on_event("startup")
@@ -515,8 +467,8 @@ def resume_watchers() -> None:
             new_status, pr_url, pr_status = devin_client.extract_status_and_pr(data)
             status_detail = data.get("status_detail") or data.get("status_reason") or None
             messages = devin_client.get_session_messages(record["session_id"])
-            num_user = sum(1 for m in messages if m.get("role") == "user")
-            num_devin = sum(1 for m in messages if m.get("role") in ("assistant", "devin"))
+            num_user = sum(1 for m in messages if m.get("source") == "user")
+            num_devin = sum(1 for m in messages if m.get("source") in ("assistant", "devin"))
             upsert_kwargs = dict(
                 status=new_status,
                 pr_url=pr_url or record.get("pr_url"),
