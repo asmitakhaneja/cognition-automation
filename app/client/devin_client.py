@@ -158,6 +158,30 @@ def send_message(session_id: str, message: str) -> dict:
     return resp.json()
 
 
+def terminate_session(session_id: str, archive: bool = False) -> dict:
+    """Terminate an active Devin session via the v3 API.
+
+    Maps to ``DELETE /v3/organizations/{org_id}/sessions/{devin_id}``. Once
+    terminated a session cannot be resumed; the endpoint returns the updated
+    session object (status transitions to ``exit``)."""
+    logger.info("Terminating session %s (archive=%s)", session_id, archive)
+    try:
+        resp = requests.delete(
+            f"{BASE_URL}/sessions/{session_id}",
+            headers=HEADERS,
+            params={"archive": str(archive).lower()},
+            timeout=30,
+        )
+        resp.raise_for_status()
+    except requests.HTTPError:
+        logger.error(
+            "Devin terminate_session failed for session %s (HTTP %d): %s",
+            session_id, resp.status_code, resp.text,
+        )
+        raise
+    return resp.json()
+
+
 def list_sessions_insights(limit: int = 50) -> dict:
     """Pull Devin's own AI-generated session insights for the dashboard/report."""
     logger.debug("Fetching sessions insights (limit=%d)", limit)

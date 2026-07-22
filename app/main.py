@@ -302,6 +302,48 @@ def send_followup_message(issue_number: int, message: str):
     return result
 
 
+@app.post("/session/{issue_number}/terminate")
+def terminate_session_endpoint(issue_number: int):
+    """Terminate the Devin session for a given issue.
+
+    Calls the Devin terminate-session API, then records the resulting status so
+    the dashboard reflects it immediately (and the watcher stops polling once
+    the session reaches a terminal state)."""
+    record = store.get_record(issue_number)
+    if not record or not record.get("session_id"):
+        raise HTTPException(status_code=404, detail="no session for this issue")
+
+    session_id = record["session_id"]
+    logger.info("Terminating session %s for issue #%d", session_id, issue_number)
+    try:
+        result = devin_client.terminate_session(session_id)
+    except Exception as exc:
+        logger.error(
+            "Failed to terminate session %s for issue #%d",
+            session_id, issue_number, exc_info=True,
+        )
+        raise HTTPException(status_code=502, detail=f"terminate failed: {exc}")
+
+    _new_status, pr_url, pr_status = devin_client.extract_status_and_pr(result)
+    # Force the app's terminal status so the per-session watcher stops polling
+    # and the dashboard/summary treat it as ended (the v3 API reports "exit",
+    # which isn't one of this app's terminal statuses).
+    updated = store.upsert_record(
+        issue_number,
+        status="stopped",
+        status_detail="terminated by user",
+        pr_url=pr_url or record.get("pr_url"),
+        pr_status=pr_status or record.get("pr_status"),
+    )
+    _broadcast({
+        "issue_number": issue_number,
+        "status": "stopped",
+        "pr_url": updated.get("pr_url"),
+        "pr_status": updated.get("pr_status"),
+    })
+    return {"terminated": True, "record": updated}
+
+
 # --------------------------------------------------------------------------
 # Observability: status API + simple HTML dashboard
 # --------------------------------------------------------------------------

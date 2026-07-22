@@ -227,6 +227,16 @@ a:hover { text-decoration: underline; }
 .bubble-text.expanded { display: block; -webkit-line-clamp: unset; }
 .expand-btn { margin-top: 0.35rem; background: none; border: none; color: var(--blue); font-size: 0.72rem; cursor: pointer; padding: 0; }
 .expand-btn:hover { text-decoration: underline; }
+.actions-cell { white-space: nowrap; text-align: center; }
+.terminate-btn {
+  cursor: pointer; padding: 4px 12px; border-radius: 7px; font-size: 0.72rem;
+  font-weight: 600; letter-spacing: 0.02em;
+  color: var(--red); background: rgba(248, 113, 113, 0.10);
+  border: 1px solid rgba(248, 113, 113, 0.35); transition: background 0.15s, color 0.15s;
+}
+.terminate-btn:hover:not(:disabled) { background: var(--red); color: #1a0d0d; }
+.terminate-btn:disabled { opacity: 0.55; cursor: default; }
+.term-error { margin-top: 4px; color: var(--red); font-size: 0.66rem; }
 .msg-badge {
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--accent-soft); color: var(--accent); border-radius: 999px;

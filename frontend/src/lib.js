@@ -6,6 +6,24 @@ export async function fetchStatus() {
   return res.json()
 }
 
+// Ask the backend to terminate the Devin session for an issue. The backend
+// calls the Devin terminate-session API and returns the updated record.
+export async function terminateSession(issueNumber) {
+  const res = await fetch(`/session/${issueNumber}/terminate`, { method: 'POST' })
+  if (!res.ok) {
+    let detail = `terminate returned ${res.status}`
+    try {
+      const body = await res.json()
+      if (body?.detail) detail = body.detail
+    } catch {}
+    throw new Error(detail)
+  }
+  return res.json()
+}
+
+// Statuses for which a session is already over and cannot be terminated.
+export const TERMINAL_STATUSES = ['finished', 'blocked', 'expired', 'stopped', 'exit', 'error']
+
 // Subscribe to backend Server-Sent Events. Returns an unsubscribe function.
 // `onEvent` fires on every status change; `onState` reports connection state.
 export function subscribeEvents(onEvent, onState) {

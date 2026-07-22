@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { fetchStatus, subscribeEvents, relativeTime, formatAcus } from './lib.js'
+import { fetchStatus, subscribeEvents, relativeTime, formatAcus, terminateSession, TERMINAL_STATUSES } from './lib.js'
 import Charts from './Charts.jsx'
 import { Icon } from './icons.jsx'
 
@@ -70,13 +70,32 @@ function MessageBubble({ msg }) {
   )
 }
 
-function SessionRow({ r }) {
+function SessionRow({ r, onChanged }) {
   const [open, setOpen] = useState(false)
+  const [terminating, setTerminating] = useState(false)
+  const [termError, setTermError] = useState(null)
   const n = r.issue_number
   const messages = r.messages || []
   const msgCount = messages.length
   const tools = [...(r.tools_and_frameworks || []), ...(r.programming_languages || [])].join(', ')
   const conf = r.classification_confidence
+  const isActive = !!r.session_id && !TERMINAL_STATUSES.includes(r.status)
+
+  const handleTerminate = async (e) => {
+    e.stopPropagation()
+    if (terminating) return
+    if (!window.confirm(`Terminate the Devin session for issue #${n}? This cannot be undone.`)) return
+    setTerminating(true)
+    setTermError(null)
+    try {
+      await terminateSession(n)
+      onChanged?.()
+    } catch (err) {
+      setTermError(err.message)
+    } finally {
+      setTerminating(false)
+    }
+  }
 
   return (
     <>
@@ -105,10 +124,25 @@ function SessionRow({ r }) {
             </a>
           ) : '—'} ▶
         </td>
+        <td className="actions-cell" onClick={(e) => e.stopPropagation()}>
+          {isActive ? (
+            <button
+              className="terminate-btn"
+              onClick={handleTerminate}
+              disabled={terminating}
+              title="Terminate this Devin session"
+            >
+              {terminating ? 'Terminating…' : 'Terminate'}
+            </button>
+          ) : (
+            <span className="detail">—</span>
+          )}
+          {termError && <div className="term-error" title={termError}>failed</div>}
+        </td>
       </tr>
       {open && (
         <tr>
-          <td colSpan={9} className="log-cell">
+          <td colSpan={10} className="log-cell">
             <div className="log-panel">
               <div className="log-header">
                 <span><strong>Session log</strong> · issue #{n} · {msgCount} message{msgCount !== 1 ? 's' : ''}</span>
@@ -192,16 +226,16 @@ export default function App() {
             <thead>
               <tr>
                 <th>Issue</th><th>Title</th><th>Category</th><th>Started</th>
-                <th>Status</th><th>PR</th><th>PR Status</th><th>ACUs</th><th>Devin Session</th>
+                <th>Status</th><th>PR</th><th>PR Status</th><th>ACUs</th><th>Devin Session</th><th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {data === null ? (
-                <tr><td colSpan={9} className="loading">Loading…</td></tr>
+                <tr><td colSpan={10} className="loading">Loading…</td></tr>
               ) : records.length ? (
-                records.map((r) => <SessionRow key={r.issue_number} r={r} />)
+                records.map((r) => <SessionRow key={r.issue_number} r={r} onChanged={load} />)
               ) : (
-                <tr><td colSpan={9} className="empty">No issues triggered yet.</td></tr>
+                <tr><td colSpan={10} className="empty">No issues triggered yet.</td></tr>
               )}
             </tbody>
           </table>
