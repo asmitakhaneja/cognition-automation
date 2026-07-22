@@ -1,0 +1,220 @@
+# Devin × Superset Remediation Orchestrator
+
+Event-driven automation that turns labeled GitHub issues on a fork of
+[apache/superset](https://github.com/apache/superset) into Devin sessions,
+which investigate the issue, write a fix + test, and open a pull request —
+fully autonomously.
+
+```
+GitHub Issue labeled "devin-fix"
+        │  (webhook)
+        ▼
+  Orchestrator (FastAPI)
+        │  POST /v3/organizations/{org_id}/sessions
+        ▼
+     Devin session  ── investigates, fixes, tests, opens PR
+        │
+        ▼
+  Orchestrator polls session status every 30s
+        │
+        ▼
+  Dashboard (/) + JSON API (/status)
+```
+
+## Why a custom orchestrator instead of Devin's built-in "Automations"?
+
+Devin's no-code Automations feature (the toggle in the Devin web app) is
+scoped to private repositories as an abuse-prevention measure — a public
+repo would let anyone open an issue and trigger a paid session on your
+account. Since this project intentionally works against a public fork of
+Superset, we integrate directly against the **Devin API** instead, with our
+own GitHub webhook receiver as the trigger. This also better demonstrates
+programmatic session management, which is the point of the exercise.
+
+## Prerequisites
+
+1. A Devin org with API access. Create a **service user** and API key
+   (`cog_...`) — see [Devin API docs](https://docs.devin.ai/api-reference/overview).
+2. Your Devin org connected to your forked GitHub repo (Devin Settings →
+   Integrations → GitHub), with write access so it can push branches and
+   open PRs.
+3. A forked copy of `apache/superset` in your own GitHub org/account, with
+   the issues you want remediated created and labeled `devin-fix`.
+4. Docker + Docker Compose installed locally.
+5. [ngrok](https://ngrok.com/)  to receive live
+   webhooks from a public GitHub repo while running locally.
+
+## Setup
+
+```bash
+cp .env.example .env
+# fill in DEVIN_API_KEY, DEVIN_ORG_ID, GITHUB_REPO, GITHUB_TOKEN, GITHUB_WEBHOOK_SECRET
+
+docker compose up --build
+```
+
+The service starts on `http://localhost:8000`:
+- `GET /` — live React dashboard (single-page app; data is loaded client-side from `/status`)
+- `GET /status` — JSON status + summary metrics (the dashboard's data source)
+- `POST /webhook/github` — GitHub webhook receiver
+- `POST /trigger/{issue_number}` — manually trigger remediation for one issue
+- `POST /trigger-all` — trigger remediation for every open issue labeled `devin-fix`
+- `POST /session/{issue_number}/message?message=...` — send a follow-up instruction to a running session
+- `GET /health` — liveness check
+
+## Registering the GitHub webhook (for live event-driven triggering)
+
+1. Expose your local server: `ngrok http 8000`, copy the `https://...ngrok-free.app` URL.
+2. On your forked repo: **Settings → Webhooks → Add webhook**
+   - Payload URL: `https://<your-ngrok-url>/webhook/github`
+   - Content type: `application/json`
+   - Secret: same value as `GITHUB_WEBHOOK_SECRET` in your `.env`
+   - Events: select **Issues** only
+3. Label any issue `devin-fix` (or open a new issue with that label) — the
+   webhook fires, the orchestrator creates a Devin session, and you'll see
+   it appear on the dashboard within a few seconds.
+
+If you'd rather not stand up a tunnel for the demo, use `POST /trigger-all`
+or `POST /trigger/{issue_number}` to kick off the same flow manually — the
+underlying Devin API integration is identical either way.
+
+## Running / simulating the workflow
+
+There are three ways to exercise the system, from "fully live" to "no external
+services at all". Pick whichever fits your demo.
+
+### A. Full live workflow (real GitHub + real Devin)
+
+1. Fill in `.env` (Devin + GitHub creds) and start it: `docker compose up --build`.
+2. Register the GitHub webhook (see the section above) **or** skip the tunnel and
+   trigger manually:
+   ```bash
+   # trigger every open issue labeled devin-fix
+   curl -X POST http://localhost:8000/trigger-all
+
+   # or trigger a single issue by number
+   curl -X POST http://localhost:8000/trigger/123
+   ```
+3. Watch the dashboard at `http://localhost:8000/` — a row appears per issue and
+   updates live (via SSE) as the orchestrator polls each Devin session to
+   completion and the PR is opened/merged.
+
+### B. Simulate the webhook without a tunnel (real Devin, no ngrok)
+
+Post a GitHub-style `issues` event straight to the receiver to mimic a labeled
+issue, which kicks off a real Devin session:
+
+```bash
+curl -X POST http://localhost:8000/webhook/github \
+  -H "X-GitHub-Event: issues" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"labeled","label":{"name":"devin-fix"},
+       "issue":{"number":123,"title":"Fix XSS in filter input"}}'
+```
+
+(If `GITHUB_WEBHOOK_SECRET` is set, add the matching `X-Hub-Signature-256`
+header, or leave the secret unset for local demos.)
+
+### C. Simulate with no external services (seeded data — good for UI demos)
+
+The dashboard reads its data from the JSON state file, so you can preview the
+whole UI (cards, charts, table, session logs) without any Devin or GitHub
+access. Seed a state file and point the app at it:
+
+```bash
+mkdir -p data
+cat > data/state.json <<'JSON'
+{
+  "records": {
+    "101": {
+      "issue_number": 101, "title": "XSS in dashboard filter input",
+      "category": "security", "classification_confidence": 0.92,
+      "programming_languages": ["FastAPI", "Python"],
+      "status": "finished", "pr_url": "https://github.com/you/superset/pull/12",
+      "pr_status": "merged", "acus_consumed": 7.4,
+      "session_url": "https://app.devin.ai/sessions/abc", "created_at": 1753100000,
+      "messages": [
+        {"source": "user",  "message": "Fix the XSS issue", "created_at": "2026-07-21T10:00:00Z"},
+        {"source": "devin", "message": "Investigating the filter input handling and adding escaping.", "created_at": "2026-07-21T10:02:00Z"}
+      ]
+    },
+    "102": {
+      "issue_number": 102, "title": "Bump vulnerable dependency lodash",
+      "category": "dependency", "classification_confidence": 0.81,
+      "programming_languages": ["JavaScript"],
+      "status": "running", "acus_consumed": 2.1,
+      "session_url": "https://app.devin.ai/sessions/def", "created_at": 1753100500
+    }
+  }
+}
+JSON
+
+# dummy creds are fine — no live API calls happen when you only view seeded state
+DEVIN_API_KEY=dummy DEVIN_ORG_ID=org-x GITHUB_REPO=you/superset \
+  STORE_PATH=$PWD/data/state.json \
+  uvicorn app.main:app --port 8000
+```
+
+Then build the frontend once (`cd frontend && npm install && npm run build`) and
+open `http://localhost:8000/` to see the populated dashboard.
+
+## Observability
+
+The dashboard (`/`) and `/status` endpoint answer "is this working?" with:
+- **Throughput**: total issues triggered, in progress, finished
+- **Effectiveness**: PRs opened, success rate (% of triggered issues that produced a PR)
+- **Speed**: average time from trigger to completion
+- **Per-issue detail**: category tag, live status, direct links to the Devin session and the resulting PR
+
+State is stored in a single JSON file (`/data/state.json`, mounted via
+`docker-compose.yml`) — intentionally simple per the assignment's guidance;
+swap in Postgres/SQLite for a production deployment without touching the
+rest of the app.
+
+## Frontend (React)
+
+The dashboard is a React single-page app (Vite) under `frontend/`. It fetches
+all data from the backend `/status` JSON API on load and subscribes to `/events`
+(Server-Sent Events) to refresh live — the backend no longer renders any HTML.
+
+`docker compose up --build` builds the SPA automatically (multi-stage Docker
+build) and FastAPI serves the compiled bundle at `/`.
+
+For local frontend development with hot-reload:
+
+```bash
+# terminal 1 — backend (serves /status, /events)
+uvicorn app.main:app --reload
+
+# terminal 2 — Vite dev server on :5173, proxies API calls to :8000
+cd frontend && npm install && npm run dev
+```
+
+To produce the static bundle the backend serves at `/` without Docker:
+
+```bash
+cd frontend && npm install && npm run build   # emits frontend/dist
+```
+
+## Project structure
+
+```
+app/
+  main.py           FastAPI app: webhook, manual triggers, JSON API, SSE, serves SPA
+  client/
+    devin_client.py Devin v3 API wrapper (create session, poll, message, insights)
+    github_client.py GitHub REST API helper (fetch issue details)
+  store.py          JSON-file state store + summary metrics
+frontend/           React (Vite) dashboard — fetches /status, live via /events
+  src/App.jsx       Dashboard UI (summary cards + sessions table + session logs)
+  src/lib.js        API fetch + SSE + formatting helpers
+Dockerfile          Multi-stage: build React bundle, then Python runtime
+docker-compose.yml
+.env.example
+```
+
+## Notes on the seeded issues
+
+See the forked repo's issue tracker (labeled `devin-fix`) for the specific
+security, dependency, code-quality, and test-coverage issues this system
+was built to remediate, and the linked PRs Devin opened in response.
