@@ -62,21 +62,23 @@ function PieChart({ data, colorFor }) {
 function Funnel({ data }) {
   const max = Math.max(...data.map((d) => d.value), 1)
   const W = 260
-  const rowH = 46
+  const rowH = 52
+  const minBarW = 110
   return (
     <svg className="funnel" viewBox={`0 0 ${W} ${data.length * rowH}`} width="100%" role="img">
       {data.map((d, i) => {
-        const w = Math.max((d.value / max) * W, 42)
+        const w = Math.max((d.value / max) * W, minBarW)
         const x = (W - w) / 2
         const y = i * rowH + 4
         const shades = ['#1d4ed8', '#2563eb', '#7c3aed']
+        const barH = rowH - 12
         return (
           <g key={d.label}>
-            <rect x={x} y={y} width={w} height={rowH - 12} rx="6" fill={shades[i % shades.length]} />
-            <text x={W / 2} y={y + (rowH - 12) / 2 + 1} textAnchor="middle" dominantBaseline="middle"
+            <rect x={x} y={y} width={w} height={barH} rx="6" fill={shades[i % shades.length]} />
+            <text x={W / 2} y={y + barH / 2 - 6} textAnchor="middle" dominantBaseline="middle"
               fontSize="12" fontWeight="700" fill="#e2e8f0">{d.value}</text>
-            <text x={W / 2} y={y + (rowH - 12) / 2 + 14} textAnchor="middle" dominantBaseline="middle"
-              fontSize="9" fill="#cbd5e1">{d.label}</text>
+            <text x={W / 2} y={y + barH / 2 + 9} textAnchor="middle" dominantBaseline="middle"
+              fontSize="10" fill="#cbd5e1">{d.label}</text>
           </g>
         )
       })}
