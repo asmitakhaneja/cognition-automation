@@ -6,13 +6,13 @@ import { Icon } from './icons.jsx'
 const CARD_FIELDS = [
   { key: 'total_triggered', label: 'Issues Picked Up', hint: 'Total issues Devin was triggered on', icon: 'inbox', accent: 'blue' },
   { key: 'in_progress', label: 'Currently Working', hint: 'Sessions still running', icon: 'activity', accent: 'amber' },
-  { key: 'finished', label: 'Completed', hint: 'Sessions that reached a terminal state', icon: 'check', accent: 'green' },
+  // { key: 'finished', label: 'Completed', hint: 'Sessions that reached a terminal state', icon: 'check', accent: 'green' },
   { key: 'prs_opened', label: 'Fixes Proposed', hint: 'Pull requests opened', icon: 'pr', accent: 'blue' },
   { key: 'prs_merged', label: 'Fixes Shipped', hint: 'Pull requests merged to the codebase', icon: 'merge', accent: 'violet' },
   { key: 'blocked_or_failed', label: 'Needs Attention', hint: 'Blocked, expired or stopped sessions', icon: 'alert', accent: 'red' },
   { key: 'success_rate_pct', label: 'Fix Success Rate', hint: '% of issues that produced a PR', suffix: '%', icon: 'target', accent: 'green' },
-  { key: 'total_acus', label: 'Total Compute (ACUs)', hint: 'Total Agent Compute Units consumed', icon: 'cpu', accent: 'violet' },
-  { key: 'avg_acus_per_fix', label: 'Compute per Fix', hint: 'Average ACUs per delivered PR', icon: 'gauge', accent: 'blue' },
+  // { key: 'total_acus', label: 'Total Compute (ACUs)', hint: 'Total Agent Compute Units consumed', icon: 'cpu', accent: 'violet' },
+  // { key: 'avg_acus_per_fix', label: 'Compute per Fix', hint: 'Average ACUs per delivered PR', icon: 'gauge', accent: 'blue' },
 ]
 
 function SummaryCards({ summary }) {
@@ -116,7 +116,7 @@ function SessionRow({ r, onChanged }) {
         </td>
         <td>{r.pr_url ? <a href={r.pr_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>PR ↗</a> : '—'}</td>
         <td><span className={`tag pr-${r.pr_status || ''}`}>{r.pr_status || '—'}</span></td>
-        <td className="ts">{formatAcus(r.acus_consumed)}</td>
+        {/* <td className="ts">{formatAcus(r.acus_consumed)}</td> */}
         <td>
           {r.session_url ? (
             <a href={r.session_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
@@ -142,7 +142,7 @@ function SessionRow({ r, onChanged }) {
       </tr>
       {open && (
         <tr>
-          <td colSpan={10} className="log-cell">
+          <td colSpan={9} className="log-cell">
             <div className="log-panel">
               <div className="log-header">
                 <span><strong>Session log</strong> · issue #{n} · {msgCount} message{msgCount !== 1 ? 's' : ''}</span>
@@ -226,7 +226,7 @@ export default function App() {
             <thead>
               <tr>
                 <th>Issue</th><th>Title</th><th>Category</th><th>Started</th>
-                <th>Status</th><th>PR</th><th>PR Status</th><th>ACUs</th><th>Devin Session</th><th>Actions</th>
+                <th>Status</th><th>PR</th><th>PR Status</th>{/* <th>ACUs</th> */}<th>Devin Session</th><th>Actions</th>
               </tr>
             </thead>
             <tbody>
