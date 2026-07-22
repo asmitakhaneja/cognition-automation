@@ -125,14 +125,14 @@ function SessionRow({ r, onChanged }) {
           ) : '—'} ▶
         </td>
         <td className="actions-cell" onClick={(e) => e.stopPropagation()}>
-          {isActive ? (
+          {r.session_id ? (
             <button
               className="terminate-btn"
               onClick={handleTerminate}
-              disabled={terminating}
-              title="Terminate this Devin session"
+              disabled={!isActive || terminating}
+              title={isActive ? 'Terminate this Devin session' : 'Session already ended'}
             >
-              {terminating ? 'Terminating…' : 'Terminate'}
+              {terminating ? 'Terminating…' : isActive ? 'Terminate' : 'Terminated'}
             </button>
           ) : (
             <span className="detail">—</span>

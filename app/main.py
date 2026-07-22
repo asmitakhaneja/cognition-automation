@@ -328,13 +328,26 @@ def terminate_session_endpoint(issue_number: int):
     # Force the app's terminal status so the per-session watcher stops polling
     # and the dashboard/summary treat it as ended (the v3 API reports "exit",
     # which isn't one of this app's terminal statuses).
-    updated = store.upsert_record(
-        issue_number,
+    upsert_kwargs = dict(
         status="stopped",
         status_detail="terminated by user",
         pr_url=pr_url or record.get("pr_url"),
         pr_status=pr_status or record.get("pr_status"),
     )
+
+    # Re-pull insights now that the session has ended so ACUs (and other
+    # metrics) reflect the final compute usage instead of a stale/empty value.
+    try:
+        insights = devin_client.get_session_insights(session_id)
+        if insights:
+            upsert_kwargs.update(devin_client.extract_insights_fields(insights))
+    except Exception:
+        logger.warning(
+            "Could not refresh insights after terminating session %s",
+            session_id, exc_info=True,
+        )
+
+    updated = store.upsert_record(issue_number, **upsert_kwargs)
     _broadcast({
         "issue_number": issue_number,
         "status": "stopped",
